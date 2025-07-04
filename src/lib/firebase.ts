@@ -3,12 +3,12 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBDU_wlgy13AXtCLdFiXzWzUcShSw9D-m8",
-  authDomain: "sys-v2-5486e.firebaseapp.com",
-  projectId: "sys-v2-5486e",
-  storageBucket: "sys-v2-5486e.firebasestorage.app",
-  messagingSenderId: "930234849632",
-  appId: "1:930234849632:web:1320c422781617e1056605"
+  apiKey: "AIzaSyDOwzthW3Q8S01no-XlGCfj8-a5Sk5eeLU",
+  authDomain: "pdi-v2.firebaseapp.com",
+  projectId: "pdi-v2",
+  storageBucket: "pdi-v2.firebasestorage.app",
+  messagingSenderId: "631665492653",
+  appId: "1:631665492653:web:7b8f9792eb2c58a861fc24"
 };
 
 const app = initializeApp(firebaseConfig);
