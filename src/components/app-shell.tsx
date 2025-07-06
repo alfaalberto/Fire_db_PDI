@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { BookOpen } from 'lucide-react';
 import { IndexPanel } from '@/components/index-panel';
 import { ViewerPanel } from '@/components/viewer-panel';
-import { bookIndex } from '@/lib/constants';
+import { INDEX as bookIndex } from '@/lib/constants';
 import { loadAllSlidesFromDB, saveSlideToDB } from '@/lib/db';
 import type { IndexItem } from '@/lib/types';
 import { SidebarProvider, Sidebar, SidebarInset } from '@/components/ui/sidebar';

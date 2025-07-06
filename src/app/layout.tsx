@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'SlideSage',
-  description: 'Visor de Presentaciones para Señales y Sistemas',
+  title: 'Procesamiento Digital de Imágenes',
+  description: 'Visor de Presentaciones para Procesamiento Digital de Imágenes',
 };
 
 export default function RootLayout({

@@ -17,12 +17,12 @@ export function IndexPanel({ data, activeSlideId, onSelect }: IndexPanelProps) {
       <SidebarHeader>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <BookOpen className="text-primary" />
-          <span>Señales y Sistemas</span>
+          <span>Procesamiento Digital de Imágenes</span>
         </h1>
       </SidebarHeader>
       <SidebarContent>
         <div className="p-2">
-          {data.map(item => (
+          {data.map((item) => (
             <IndexItem
               key={item.id}
               item={item}
