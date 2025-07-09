@@ -10,7 +10,9 @@ export const INDEX: IndexItem[] = [
   {
     id: 'revision-probabilidad-variables-aleatorias',
     title: 'b. Revisión de Probabilidad y Variables Aleatorias',
-    children: [],
+    children: [
+      { id: 'momentos-valor-esperado', title: 'b.1 Momentos y Valor Esperado' },
+    ],
   },
   {
     id: 'revision-sistemas-lineales',
