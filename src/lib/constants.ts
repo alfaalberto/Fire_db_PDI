@@ -12,6 +12,10 @@ export const INDEX: IndexItem[] = [
     title: 'b. Revisión de Probabilidad y Variables Aleatorias',
     children: [
       { id: 'momentos-valor-esperado', title: 'b.1 Momentos y Valor Esperado' },
+      { id: 'funcion-densidad-gaussiana', title: 'b.2 Función de densidad de probabilidad Gaussiana' },
+      { id: 'varias-variables-aleatorias', title: 'b.3 Varias variables aleatorias' },
+      { id: 'densidad-gaussiana-multivariable', title: 'b.4 Densidad Gaussiana Multivariable' },
+      { id: 'transformaciones-lineales-variables-aleatorias', title: 'b.5 Transformaciones lineales de variables aleatorias' },
     ],
   },
   {
