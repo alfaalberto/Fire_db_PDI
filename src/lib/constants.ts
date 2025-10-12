@@ -1,6 +1,26 @@
 import type { IndexItem } from './types';
 
-export const INDEX: IndexItem[] = [
+// Helper function to create unique IDs for nested items
+const createUniqueIds = (items: IndexItem[], parentId = ''): IndexItem[] => {
+  return items.map(item => {
+    // Sanitize title to create a more readable ID part
+    const idPart = item.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const uniqueId = parentId ? `${parentId}-${idPart}` : item.id; // Keep original top-level IDs if they are clean
+    
+    const newItem: IndexItem = {
+      ...item,
+      id: uniqueId,
+    };
+    
+    if (item.children) {
+      newItem.children = createUniqueIds(item.children, uniqueId);
+    }
+    
+    return newItem;
+  });
+};
+
+const originalIndex: IndexItem[] = [
   {
     id: 'revision-matrices-vectores',
     title: 'a. Revisión de Matrices y Vectores',
@@ -193,3 +213,6 @@ export const INDEX: IndexItem[] = [
     ],
   },
 ];
+
+// We make sure all IDs are unique before exporting
+export const INDEX: IndexItem[] = createUniqueIds(originalIndex);

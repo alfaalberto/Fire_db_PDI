@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
-import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, Trash2, ChevronLeft, ChevronRight, PlusCircle, Move } from 'lucide-react';
+import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move } from 'lucide-react';
 import type { IndexItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { ConfirmationModal } from './confirmation-modal';
 import { SlideIframe } from './slide-iframe';
 import { improveHtmlWithAI } from '@/ai/flows/improve-html-with-ai';
 import { Card, CardContent } from './ui/card';
@@ -17,27 +16,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAppContext } from './app-context'; // Import the context hook
 
 interface ViewerPanelProps {
   slide: IndexItem | null;
   onSave: (id: string, content: string[] | null) => void;
-  onRelocate: (slideId: string) => void; // New prop
+  onRelocate: (slideId: string) => void;
   isPresentationMode: boolean;
-  togglePresentationMode: () => void;
   onNavigate: (slideId: string | null) => void;
   prevSlideId: string | null;
   nextSlideId: string | null;
 }
 
-export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, togglePresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
+export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
   const [subSlideIndex, setSubSlideIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
-  const [isDeleteSubSlideModalOpen, setIsDeleteSubSlideModalOpen] = useState(false);
   const [isImproving, startImproving] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { toast } = useToast();
+  const { togglePresentationMode } = useAppContext(); // Use the context to get the function
 
   useEffect(() => {
     setSubSlideIndex(0);
@@ -59,51 +58,45 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
         if (!hasContent) return;
-
         if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
         const activeEl = document.activeElement;
-        if (activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName)) {
-            return;
-        }
-        if (activeEl && (activeEl as HTMLElement).isContentEditable) {
-            return;
-        }
+        if (activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName)) return;
+        if (activeEl && (activeEl as HTMLElement).isContentEditable) return;
 
         let handled = false;
-        if (event.key === 'ArrowRight') {
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
             if (isPresentationMode && subSlideIndex < totalSubSlides - 1) {
                 setSubSlideIndex(i => i + 1);
                 handled = true;
+            } else if (isPresentationMode) {
+                onNavigate(nextSlideId);
+                handled = true;
             }
-        } else if (event.key === 'ArrowLeft') {
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
             if (isPresentationMode && subSlideIndex > 0) {
                 setSubSlideIndex(i => i - 1);
+                handled = true;
+            } else if (isPresentationMode) {
+                onNavigate(prevSlideId);
                 handled = true;
             }
         }
 
-        if (handled) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
+        if (handled) event.preventDefault();
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isPresentationMode, hasContent, subSlideIndex, totalSubSlides]);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPresentationMode, hasContent, subSlideIndex, totalSubSlides, onNavigate, prevSlideId, nextSlideId]);
 
   const handleSave = useCallback(() => {
     if (!slide) return;
     const newContentArray = [...(slide.content || [])];
-    
     if (newContentArray.length === 0) {
         newContentArray.push(htmlContent);
     } else {
         newContentArray[subSlideIndex] = htmlContent;
     }
-
     onSave(slide.id, newContentArray);
     setIsEditing(false);
     toast({ title: "Cambios guardados." });
@@ -117,15 +110,6 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
       setIsEditing(false);
       toast({ title: "Nueva diapositiva añadida." });
   }, [slide, onSave, toast]);
-  
-  const handleConfirmDeleteSubSlide = useCallback(() => {
-    if (!slide || !slide.content) return;
-    const newContentArray = slide.content.filter((_, i) => i !== subSlideIndex);
-    onSave(slide.id, newContentArray.length > 0 ? newContentArray : null);
-    setSubSlideIndex(prev => Math.max(0, prev - 1));
-    setIsDeleteSubSlideModalOpen(false);
-    toast({ title: "Diapositiva eliminada." });
-  }, [slide, subSlideIndex, onSave, toast]);
 
   const handleImproveWithAI = useCallback(() => {
     const contentToImprove = isEditing ? htmlContent : currentSlideContent;
@@ -184,7 +168,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
   }
 
   return (
-    <div className="flex-1 bg-background flex flex-col h-screen relative">
+    <div className="flex-1 bg-background flex flex-col h-full relative">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".html" className="hidden" />
       {!isPresentationMode && (
           <header className="bg-card p-2 flex items-center justify-between text-foreground border-b border-border shrink-0">
@@ -195,18 +179,12 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
                   <Button size="sm"><PlusCircle /> Añadir</Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={handleAddNewSlide}>
-                    Añadir diapositiva en blanco
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                    Subir archivo (.html)
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleAddNewSlide}>Añadir diapositiva en blanco</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>Subir archivo (.html)</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              
               {hasContent && !isEditing && <Button onClick={() => setIsEditing(true)} size="sm"><Edit /> Editar</Button>}
               {hasContent && <Button onClick={() => onRelocate(slide.id)} variant="outline" size="sm"><Move /> Reubicar</Button>}
-              {hasContent && <Button onClick={() => setIsDeleteSubSlideModalOpen(true)} variant="destructive" size="sm"><Trash2 /> Borrar Diapositiva</Button>}
               <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!hasContent} title="Modo presentación">
                 <Maximize size={18} />
               </Button>
@@ -217,14 +195,14 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
       <main className="flex-1 overflow-y-auto">
         {isEditing ? (
           <div className="p-4 h-full flex flex-col gap-4">
-            <Textarea value={htmlContent} onChange={(e) => setHtmlContent(e.target.value)} placeholder="Pega aquí el código HTML de tu diapositiva..." className="w-full flex-1 bg-background/50 text-foreground p-4 rounded-md border-border focus:ring-2 focus:ring-primary focus:outline-none font-code text-sm resize-none" />
+            <Textarea value={htmlContent} onChange={(e) => setHtmlContent(e.target.value)} placeholder="Pega aquí el código HTML..." className="w-full flex-1 font-code text-sm" />
             <div className="flex justify-between items-center">
                <Button onClick={handleImproveWithAI} className="bg-purple-600 hover:bg-purple-500 text-white" disabled={isImproving}>
-                 {isImproving ? <><Skeleton className="h-4 w-4 mr-2 rounded-full animate-spin" /> Mejorando...</> : <><Sparkles size={16} /> Mejorar con IA</>}
+                 {isImproving ? "Mejorando..." : <><Sparkles size={16} /> Mejorar con IA</>}
                </Button>
               <div className="flex gap-2">
                 <Button onClick={() => setIsEditing(false)} variant="secondary">Cancelar</Button>
-                <Button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white">Guardar Cambios</Button>
+                <Button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white">Guardar</Button>
               </div>
             </div>
           </div>
@@ -235,11 +213,11 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
             <Card className="max-w-lg w-full">
               <CardContent className="pt-6 text-center">
                   <Upload size={48} className="mb-4 text-muted-foreground mx-auto" />
-                  <h3 className="text-xl font-semibold text-foreground">Sin contenido para esta sección</h3>
-                  <p className="mt-2 mb-6 max-w-md text-center mx-auto">Puedes añadir el contenido de la diapositiva de dos maneras:</p>
-                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <Button onClick={() => setIsEditing(true)} size="lg">Pegar Código HTML</Button>
-                    <Button onClick={() => fileInputRef.current?.click()} variant="secondary" size="lg">Subir Archivo (.html)</Button>
+                  <h3 className="text-xl font-semibold text-foreground">Sin contenido</h3>
+                  <p className="mt-2 mb-6">Puedes pegar código HTML o subir un archivo.</p>
+                  <div className="flex gap-4 justify-center">
+                    <Button onClick={() => setIsEditing(true)} size="lg">Pegar Código</Button>
+                    <Button onClick={() => fileInputRef.current?.click()} variant="secondary" size="lg">Subir Archivo</Button>
                   </div>
               </CardContent>
             </Card>
@@ -248,25 +226,10 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
       </main>
 
       {!isEditing && !isPresentationMode && hasContent && totalSubSlides > 1 && (
-        <footer className="bg-card p-2 flex items-center justify-center gap-4 text-foreground border-t border-border shrink-0">
-          <Button
-            onClick={() => setSubSlideIndex(i => i - 1)}
-            disabled={subSlideIndex === 0}
-            variant="outline"
-            size="sm"
-          >
-            Anterior
-          </Button>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            Diapositiva {subSlideIndex + 1} de {totalSubSlides}
-          </span>
-          <Button
-            onClick={() => setSubSlideIndex(i => i + 1)}
-            disabled={subSlideIndex >= totalSubSlides - 1}
-            size="sm"
-          >
-            Siguiente
-          </Button>
+        <footer className="bg-card p-2 flex items-center justify-center gap-4 text-foreground border-t">
+          <Button onClick={() => setSubSlideIndex(i => i - 1)} disabled={subSlideIndex === 0} variant="outline" size="sm">Anterior</Button>
+          <span>{subSlideIndex + 1} / {totalSubSlides}</span>
+          <Button onClick={() => setSubSlideIndex(i => i + 1)} disabled={subSlideIndex >= totalSubSlides - 1} size="sm">Siguiente</Button>
         </footer>
       )}
       
@@ -275,41 +238,23 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, tog
             onClick={togglePresentationMode}
             variant="ghost"
             size="icon"
-            className="absolute top-4 right-4 z-20 bg-background/50 hover:bg-background/80 rounded-full h-12 w-12"
+            className="absolute top-4 right-4 z-20 bg-background/50 hover:bg-background/80 rounded-full"
             title="Salir del modo presentación"
         >
             <Minimize size={24} />
         </Button>
       )}
 
-      {!isEditing && hasContent && (
+      {(!isEditing || isPresentationMode) && hasContent && (
         <>
-          <Button
-            variant="outline"
-            size="icon"
-            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full h-12 w-12 z-10 bg-background/50 hover:bg-background/80 disabled:opacity-30"
-            onClick={() => onNavigate(prevSlideId)}
-            disabled={!prevSlideId}
-            title="Sección anterior (←)"
-          >
-            <ChevronLeft size={24} />
+          <Button variant="outline" size="icon" className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={() => onNavigate(prevSlideId)} disabled={!prevSlideId}>
+            <ChevronLeft />
           </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full h-12 w-12 z-10 bg-background/50 hover:bg-background/80 disabled:opacity-30"
-            onClick={() => onNavigate(nextSlideId)}
-            disabled={!nextSlideId}
-            title="Sección siguiente (→)"
-          >
-            <ChevronRight size={24} />
+          <Button variant="outline" size="icon" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={() => onNavigate(nextSlideId)} disabled={!nextSlideId}>
+            <ChevronRight />
           </Button>
         </>
       )}
-
-       <ConfirmationModal isOpen={isDeleteSubSlideModalOpen} onClose={() => setIsDeleteSubSlideModalOpen(false)} onConfirm={handleConfirmDeleteSubSlide} title="Confirmar Eliminación">
-        ¿Estás seguro de que quieres eliminar la diapositiva actual ({subSlideIndex + 1} de {totalSubSlides})? Esta acción no se puede deshacer.
-      </ConfirmationModal>
     </div>
   );
 }

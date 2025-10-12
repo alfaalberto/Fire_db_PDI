@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -40,8 +40,6 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
   const selectedParent = newParentId ? findItem(index, newParentId) : null;
   const siblings = selectedParent ? selectedParent.children || [] : index.filter(item => !item.parentId);
 
-  // If moving to a new parent, the max position is the number of children.
-  // If staying in the same parent, the max position is the number of children minus one.
   const maxPosition = newParentId === slide.parentId 
     ? Math.max(0, siblings.length -1)
     : siblings.length;
@@ -56,6 +54,9 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Reubicar Diapositiva: {slide.title}</DialogTitle>
+          <DialogDescription>
+            Selecciona una nueva sección y posición para esta diapositiva.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div>
