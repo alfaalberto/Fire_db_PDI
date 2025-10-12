@@ -1,0 +1,4 @@
+node_modules
+.next
+.firebase/pdi-v2/functions/node_modules
+.firebase/pdi-v2/functions/.next
