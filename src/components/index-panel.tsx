@@ -9,9 +9,10 @@ interface IndexPanelProps {
   data: IndexItemType[];
   activeSlideId: string | null;
   onSelect: (id: string) => void;
+  onIndexChange: (newIndex: IndexItemType[]) => void; // Added this line
 }
 
-export function IndexPanel({ data, activeSlideId, onSelect }: IndexPanelProps) {
+export function IndexPanel({ data, activeSlideId, onSelect, onIndexChange }: IndexPanelProps) {
   return (
     <>
       <SidebarHeader>

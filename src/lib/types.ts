@@ -3,4 +3,5 @@ export interface IndexItem {
   title: string;
   children?: IndexItem[];
   content?: string[] | null;
+  parentId?: string;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
-import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, PlusCircle } from 'lucide-react';
+import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, Trash2, ChevronLeft, ChevronRight, PlusCircle, Move } from 'lucide-react';
 import type { IndexItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,7 +21,7 @@ import {
 interface ViewerPanelProps {
   slide: IndexItem | null;
   onSave: (id: string, content: string[] | null) => void;
-  onClear: (id: string) => void;
+  onRelocate: (slideId: string) => void; // New prop
   isPresentationMode: boolean;
   togglePresentationMode: () => void;
   onNavigate: (slideId: string | null) => void;
@@ -29,11 +29,10 @@ interface ViewerPanelProps {
   nextSlideId: string | null;
 }
 
-export function ViewerPanel({ slide, onSave, onClear, isPresentationMode, togglePresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
+export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, togglePresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
   const [subSlideIndex, setSubSlideIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
-  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [isDeleteSubSlideModalOpen, setIsDeleteSubSlideModalOpen] = useState(false);
   const [isImproving, startImproving] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -128,14 +127,6 @@ export function ViewerPanel({ slide, onSave, onClear, isPresentationMode, toggle
     toast({ title: "Diapositiva eliminada." });
   }, [slide, subSlideIndex, onSave, toast]);
 
-  const handleConfirmClear = useCallback(() => {
-    if (slide) {
-      onClear(slide.id);
-      toast({ title: "Contenido de la sección eliminado." });
-    }
-    setIsClearModalOpen(false);
-  }, [slide, onClear, toast]);
-
   const handleImproveWithAI = useCallback(() => {
     const contentToImprove = isEditing ? htmlContent : currentSlideContent;
     if (!contentToImprove) {
@@ -180,16 +171,6 @@ export function ViewerPanel({ slide, onSave, onClear, isPresentationMode, toggle
     if(event.target) event.target.value = '';
   }, [slide, onSave, toast]);
 
-  const handleScroll = useCallback((direction: 'up' | 'down') => {
-    if (iframeRef.current?.contentWindow) {
-      const scrollAmount = iframeRef.current.clientHeight * 0.8;
-      iframeRef.current.contentWindow.scrollBy({
-        top: direction === 'up' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  }, []);
-
   if (!slide) {
     return (
       <div className="flex-1 bg-background flex items-center justify-center p-8">
@@ -224,8 +205,8 @@ export function ViewerPanel({ slide, onSave, onClear, isPresentationMode, toggle
               </DropdownMenu>
               
               {hasContent && !isEditing && <Button onClick={() => setIsEditing(true)} size="sm"><Edit /> Editar</Button>}
-              {hasContent && <Button onClick={() => setIsDeleteSubSlideModalOpen(true)} variant="outline" size="sm"><Trash2 /> Borrar Diapositiva</Button>}
-              {hasContent && <Button onClick={() => setIsClearModalOpen(true)} variant="destructive" size="sm">Limpiar Todo</Button>}
+              {hasContent && <Button onClick={() => onRelocate(slide.id)} variant="outline" size="sm"><Move /> Reubicar</Button>}
+              {hasContent && <Button onClick={() => setIsDeleteSubSlideModalOpen(true)} variant="destructive" size="sm"><Trash2 /> Borrar Diapositiva</Button>}
               <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!hasContent} title="Modo presentación">
                 <Maximize size={18} />
               </Button>
@@ -301,31 +282,6 @@ export function ViewerPanel({ slide, onSave, onClear, isPresentationMode, toggle
         </Button>
       )}
 
-      {isPresentationMode && hasContent && totalSubSlides > 1 && (
-        <div className="absolute right-4 bottom-4 z-10 flex flex-col gap-2">
-            <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full h-12 w-12 bg-background/50 hover:bg-background/80 disabled:opacity-30"
-                onClick={() => setSubSlideIndex(i => i - 1)}
-                disabled={subSlideIndex === 0}
-                title="Diapositiva anterior (↑)"
-            >
-                <ChevronUp size={24} />
-            </Button>
-            <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full h-12 w-12 bg-background/50 hover:bg-background/80 disabled:opacity-30"
-                onClick={() => setSubSlideIndex(i => i + 1)}
-                disabled={subSlideIndex >= totalSubSlides - 1}
-                title="Siguiente diapositiva (↓)"
-            >
-                <ChevronDown size={24} />
-            </Button>
-        </div>
-      )}
-
       {!isEditing && hasContent && (
         <>
           <Button
@@ -350,10 +306,6 @@ export function ViewerPanel({ slide, onSave, onClear, isPresentationMode, toggle
           </Button>
         </>
       )}
-
-      <ConfirmationModal isOpen={isClearModalOpen} onClose={() => setIsClearModalOpen(false)} onConfirm={handleConfirmClear} title="Confirmar Limpieza Total">
-        ¿Estás seguro de que quieres eliminar <strong>todas las diapositivas</strong> de esta sección? Esta acción no se puede deshacer.
-      </ConfirmationModal>
 
        <ConfirmationModal isOpen={isDeleteSubSlideModalOpen} onClose={() => setIsDeleteSubSlideModalOpen(false)} onConfirm={handleConfirmDeleteSubSlide} title="Confirmar Eliminación">
         ¿Estás seguro de que quieres eliminar la diapositiva actual ({subSlideIndex + 1} de {totalSubSlides})? Esta acción no se puede deshacer.
