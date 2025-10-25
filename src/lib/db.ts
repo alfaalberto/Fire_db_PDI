@@ -1,7 +1,7 @@
 "use client";
 
 import { db } from './firebase';
-import { collection, doc, getDocs, setDoc } from "firebase/firestore";
+import { collection, doc, getDocs, setDoc, deleteDoc } from "firebase/firestore";
 
 const SLIDES_COLLECTION = 'slides';
 
@@ -11,6 +11,16 @@ export const saveSlideToDB = async (id: string, content: string[] | null): Promi
     await setDoc(slideRef, { id, content });
   } catch (error) {
     console.error("Error saving slide to Firestore:", error);
+    throw error;
+  }
+};
+
+export const deleteSlideFromDB = async (id: string): Promise<void> => {
+  try {
+    const slideRef = doc(db, SLIDES_COLLECTION, id);
+    await deleteDoc(slideRef);
+  } catch (error) {
+    console.error("Error deleting slide from Firestore:", error);
     throw error;
   }
 };

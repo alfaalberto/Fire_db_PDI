@@ -57,7 +57,7 @@ export function IndexItem({ item, level, activeSlideId, onSelect }: IndexItemPro
       {hasChildren && (
         <CollapsibleContent>
           <div className="flex flex-col">
-            {item.children.map(child => (
+            {(item.children ?? []).map(child => (
               <IndexItem
                 key={child.id}
                 item={child}

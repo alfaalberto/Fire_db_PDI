@@ -8,7 +8,7 @@ import { ViewerPanel } from '@/components/viewer-panel';
 import { RelocateSlideModal } from '@/components/relocate-slide-modal';
 import type { IndexItem } from '@/lib/types';
 import { INDEX as INITIAL_INDEX } from '@/lib/constants';
-import { loadAllSlidesFromDB, saveSlideToDB } from '@/lib/db';
+import { deleteSlide, loadAllSlidesCached, saveSlide } from '@/lib/services/slides';
 import { produce } from 'immer';
 import { cn } from '@/lib/utils';
 import { AppContext } from './app-context';
@@ -79,25 +79,33 @@ export default function AppShell() {
 
   useEffect(() => {
     async function restoreData() {
-      let storedIndexStructure = getStoredIndex() || INITIAL_INDEX;
-      storedIndexStructure = ensureUniqueIds(storedIndexStructure);
-      const allSlides = await loadAllSlidesFromDB();
-      const contentMap = new Map<string, string[] | null>();
-      allSlides.forEach(slide => contentMap.set(slide.id, slide.content));
-      let restoredIndex = mapContentToIndex(storedIndexStructure, contentMap);
-      const allIndexIds = new Set(flattenIndex(restoredIndex).map(i => i.id));
-      const orphanSlides = allSlides.filter(s => !allIndexIds.has(s.id));
-      if (orphanSlides.length > 0) {
-        const orphanIndexItems: IndexItem[] = orphanSlides.map(s => ({
-            id: s.id,
-            title: `(Recuperado) ${s.id}`,
-            content: s.content,
-        }));
-        restoredIndex = [...restoredIndex, ...orphanIndexItems];
+      try {
+        let storedIndexStructure = getStoredIndex() || INITIAL_INDEX;
+        storedIndexStructure = ensureUniqueIds(storedIndexStructure);
+        const allSlides = await loadAllSlidesCached();
+        const contentMap = new Map<string, string[] | null>();
+        allSlides.forEach(slide => contentMap.set(slide.id, slide.content));
+        let restoredIndex = mapContentToIndex(storedIndexStructure, contentMap);
+        const allIndexIds = new Set(flattenIndex(restoredIndex).map(i => i.id));
+        const orphanSlides = allSlides.filter(s => !allIndexIds.has(s.id));
+        if (orphanSlides.length > 0) {
+          const orphanIndexItems: IndexItem[] = orphanSlides.map(s => ({
+              id: s.id,
+              title: `(Recuperado) ${s.id}`,
+              content: s.content,
+          }));
+          restoredIndex = [...restoredIndex, ...orphanIndexItems];
+        }
+        setIndex(restoredIndex);
+        saveIndexStructureToStorage(restoredIndex);
+        setIsLoaded(true);
+      } catch (error) {
+        console.error("Fallo al restaurar datos, usando índice local:", error);
+        const fallback = ensureUniqueIds(INITIAL_INDEX);
+        setIndex(fallback);
+        saveIndexStructureToStorage(fallback);
+        setIsLoaded(true);
       }
-      setIndex(restoredIndex);
-      saveIndexStructureToStorage(restoredIndex);
-      setIsLoaded(true);
     }
     restoreData();
   }, []);
@@ -124,7 +132,7 @@ export default function AppShell() {
 
   const handleSave = useCallback(async (id: string, content: string[] | null) => {
     try {
-      await saveSlideToDB(id, content);
+      await saveSlide(id, content);
       const newIndex = produce(index, (draft: IndexItem[]) => {
         const item = findItem(draft, id);
         if (item) item.content = content;
@@ -161,6 +169,33 @@ export default function AppShell() {
     setRelocateModalOpen(false);
     setSlideToRelocate(null);
   }, [index, slideToRelocate, handleIndexChange]);
+
+  const handleDelete = useCallback(async (slideId: string) => {
+    try {
+      await deleteSlide(slideId);
+    } catch (e) {
+      console.error('Failed to delete slide in DB:', e);
+    }
+    const newIndex = produce(index, (draft: IndexItem[]) => {
+      const result = findItemWithParent(draft, slideId);
+      if (!result) return;
+      const { item, parent } = result;
+      if (parent && parent.children) {
+        parent.children = parent.children.filter(c => c.id !== item.id);
+      } else {
+        const idx = draft.findIndex(i => i.id === item.id);
+        if (idx >= 0) draft.splice(idx, 1);
+      }
+    });
+    handleIndexChange(newIndex);
+    // Update selection
+    const flat = flattenIndex(newIndex);
+    const currentIdx = flat.findIndex(s => s.id === selectedSlideId);
+    if (currentIdx === -1) {
+      const next = flat[0]?.id ?? null;
+      setSelectedSlideId(next);
+    }
+  }, [index, selectedSlideId, handleIndexChange]);
 
   const openRelocateModal = useCallback((slideId: string) => {
     const slide = flatIndex.find(item => item.id === slideId);
@@ -199,6 +234,7 @@ export default function AppShell() {
                         slide={selectedSlide}
                         onSave={handleSave}
                         onRelocate={openRelocateModal}
+                        onDelete={handleDelete}
                         isPresentationMode={isPresentationMode}
                         onNavigate={setSelectedSlideId}
                         prevSlideId={prevSlideId}

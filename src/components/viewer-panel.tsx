@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
-import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move } from 'lucide-react';
+import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move, Trash2 } from 'lucide-react';
 import type { IndexItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SlideIframe } from './slide-iframe';
-import { improveHtmlWithAI } from '@/ai/flows/improve-html-with-ai';
+// Note: avoid importing Genkit server flow directly in client to keep prod build lean.
 import { Card, CardContent } from './ui/card';
 import { Skeleton } from './ui/skeleton';
 import {
@@ -22,13 +22,14 @@ interface ViewerPanelProps {
   slide: IndexItem | null;
   onSave: (id: string, content: string[] | null) => void;
   onRelocate: (slideId: string) => void;
+  onDelete: (slideId: string) => void;
   isPresentationMode: boolean;
   onNavigate: (slideId: string | null) => void;
   prevSlideId: string | null;
   nextSlideId: string | null;
 }
 
-export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
+export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
   const [subSlideIndex, setSubSlideIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
@@ -37,10 +38,24 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { toast } = useToast();
   const { togglePresentationMode } = useAppContext(); // Use the context to get the function
+  const saveTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setSubSlideIndex(0);
   }, [slide?.id]);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const d = e.data as any;
+      if (d && d.__slideLog) {
+        const lvl = (d.level || 'log') as 'log' | 'warn' | 'error';
+        const args = Array.isArray(d.args) ? d.args : [d.args];
+        (console[lvl] || console.log).apply(console, ['[SLIDE]'].concat(args));
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   useEffect(() => {
     if (slide?.content && slide.content.length > 0) {
@@ -50,6 +65,23 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     }
     setIsEditing(false);
   }, [slide, subSlideIndex]);
+
+  useEffect(() => {
+    if (!isEditing || !slide) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const newContentArray = [...(slide.content || [])];
+      if (newContentArray.length === 0) {
+        newContentArray.push(htmlContent);
+      } else {
+        newContentArray[subSlideIndex] = htmlContent;
+      }
+      onSave(slide.id, newContentArray);
+    }, 800);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [htmlContent, isEditing, slide, subSlideIndex, onSave]);
 
   const hasContent = slide?.content && slide.content.length > 0;
   const currentSlideContent = hasContent ? (slide.content?.[subSlideIndex] || '') : '';
@@ -119,7 +151,13 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     }
     startImproving(async () => {
       try {
-        const result = await improveHtmlWithAI({ htmlContent: contentToImprove });
+        const res = await fetch('/api/improve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ htmlContent: contentToImprove })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const result = await res.json() as { improvedHtml?: string };
         if (result && result.improvedHtml) {
           setHtmlContent(result.improvedHtml);
           setIsEditing(true);
@@ -185,6 +223,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
               </DropdownMenu>
               {hasContent && !isEditing && <Button onClick={() => setIsEditing(true)} size="sm"><Edit /> Editar</Button>}
               {hasContent && <Button onClick={() => onRelocate(slide.id)} variant="outline" size="sm"><Move /> Reubicar</Button>}
+              {hasContent && <Button onClick={() => onDelete(slide.id)} variant="destructive" size="sm" title="Eliminar diapositiva"><Trash2 /> Eliminar</Button>}
               <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!hasContent} title="Modo presentación">
                 <Maximize size={18} />
               </Button>

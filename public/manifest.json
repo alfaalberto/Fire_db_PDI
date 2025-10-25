@@ -1,0 +1,15 @@
+{
+  "name": "Procesamiento Digital de Imágenes",
+  "short_name": "PDI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
