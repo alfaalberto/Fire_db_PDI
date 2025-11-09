@@ -39,6 +39,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
   const { toast } = useToast();
   const { togglePresentationMode } = useAppContext(); // Use the context to get the function
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
+  const prevSlideIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setSubSlideIndex(0);
@@ -58,13 +59,22 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
   }, []);
 
   useEffect(() => {
-    if (slide?.content && slide.content.length > 0) {
-      setHtmlContent(slide.content[subSlideIndex] || '');
+    const currentId = slide?.id ?? null;
+    const idChanged = prevSlideIdRef.current !== currentId;
+    prevSlideIdRef.current = currentId;
+
+    const hasContent = !!(slide?.content && slide.content.length > 0);
+    const newHtml = hasContent ? (slide!.content![subSlideIndex] || '') : '';
+
+    if (idChanged) {
+      setHtmlContent(newHtml);
+      setIsEditing(false);
     } else {
-      setHtmlContent('');
+      if (!isEditing) {
+        setHtmlContent(newHtml);
+      }
     }
-    setIsEditing(false);
-  }, [slide, subSlideIndex]);
+  }, [slide, subSlideIndex, isEditing]);
 
   useEffect(() => {
     if (!isEditing || !slide) return;
