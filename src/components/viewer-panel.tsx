@@ -39,10 +39,29 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
   const { toast } = useToast();
   const { togglePresentationMode } = useAppContext(); // Use the context to get the function
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
+  const prevSlideIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setSubSlideIndex(0);
-  }, [slide?.id]);
+    const currentId = slide?.id ?? null;
+    const prevId = prevSlideIdRef.current;
+    // Reset sub-slide index on actual navigation to a new, valid slide id
+    if (prevId !== currentId && currentId !== null) {
+      try { console.log('[VIEWER] slide id changed', { prevId, currentId, action: 'resetSubSlideIndex' }); } catch {}
+      setSubSlideIndex(0);
+    }
+    // Only exit edit mode when moving between two valid, different slide ids
+    if (prevId !== null && currentId !== null && prevId !== currentId) {
+      try { console.log('[VIEWER] exiting edit due to slide change', { prevId, currentId }); } catch {}
+      setIsEditing(false);
+    }
+    // Initialize displayed content when not editing
+    if (!isEditing) {
+      const initial = slide?.content && slide.content.length > 0 ? (slide.content[0] || '') : '';
+      try { console.log('[VIEWER] set initial htmlContent', { subSlideIndex: 0, hasContent: !!slide?.content?.length }); } catch {}
+      setHtmlContent(initial);
+    }
+    prevSlideIdRef.current = currentId;
+  }, [slide?.id, isEditing, slide]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -50,7 +69,16 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
       if (d && d.__slideLog) {
         const lvl = (d.level || 'log') as 'log' | 'warn' | 'error';
         const args = Array.isArray(d.args) ? d.args : [d.args];
-        (console[lvl] || console.log).apply(console, ['[SLIDE]'].concat(args));
+        // Ensure a single [SLIDE] prefix
+        if (args.length > 0 && typeof args[0] === 'string') {
+          const first = args[0] as string;
+          if (!first.startsWith('[SLIDE]')) {
+            args.unshift('[SLIDE]');
+          }
+        } else {
+          args.unshift('[SLIDE]');
+        }
+        (console[lvl] || console.log).apply(console, args as any);
       }
     };
     window.addEventListener('message', handler);
@@ -58,13 +86,16 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
   }, []);
 
   useEffect(() => {
-    if (slide?.content && slide.content.length > 0) {
-      setHtmlContent(slide.content[subSlideIndex] || '');
-    } else {
-      setHtmlContent('');
+    // When slide content or sub-slide index changes, update the displayed content
+    // but do not force exit from edit mode
+    if (!isEditing) {
+      const current = slide?.content && slide.content.length > 0
+        ? (slide.content[subSlideIndex] || '')
+        : '';
+      try { console.log('[VIEWER] update htmlContent on deps change', { subSlideIndex, isEditing }); } catch {}
+      setHtmlContent(current);
     }
-    setIsEditing(false);
-  }, [slide, subSlideIndex]);
+  }, [slide, subSlideIndex, isEditing]);
 
   useEffect(() => {
     if (!isEditing || !slide) return;
@@ -130,6 +161,8 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
         newContentArray[subSlideIndex] = htmlContent;
     }
     onSave(slide.id, newContentArray);
+    // Manual save closes edit mode by design
+    try { console.log('[VIEWER] manual save -> exit edit'); } catch {}
     setIsEditing(false);
     toast({ title: "Cambios guardados." });
   }, [slide, htmlContent, subSlideIndex, onSave, toast]);

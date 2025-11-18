@@ -18,7 +18,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; style-src 'unsafe-inline' https: http: data:; img-src https: http: data: blob:; media-src https: http: data: blob:; font-src https: http: data:; connect-src https: http: ws: wss: data:; worker-src blob: https: http: data:; child-src https: http: data: blob:; frame-src https: http: data: blob:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https: http: data: blob:; style-src 'unsafe-inline' https: http: data:; img-src https: http: data: blob:; media-src https: http: data: blob:; font-src https: http: data:; connect-src https: http: ws: wss: data:; worker-src blob: https: http: data:; child-src https: http: data: blob:; frame-src https: http: data: blob:; object-src 'none'; base-uri 'self'">
           <base href="${baseHref}">
           <link rel="stylesheet" href="/slide-iframe.css">
           <link rel="stylesheet" href="/katex/katex.min.css">
@@ -151,7 +151,8 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                                   {left: '\\(', right: '\\)', display: false},
                                   {left: '\\[', right: '\\]', display: true}
                               ],
-                              throwOnError : false
+                              throwOnError : false,
+                              strict: 'ignore'
                           });
                       } else {
                           try { console.warn('KaTeX auto-render not available; skipping math rendering'); } catch (e) {}
@@ -187,7 +188,6 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
       className="w-full h-full border-0"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
       allow="fullscreen; autoplay; clipboard-read; clipboard-write; xr-spatial-tracking"
-      allowFullScreen
     />
   );
 });
