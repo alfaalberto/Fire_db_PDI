@@ -1,0 +1,88 @@
+[debug] [2025-11-18T23:58:22.227Z] ----------------------------------------------------------------------
+[debug] [2025-11-18T23:58:22.230Z] Command:       C:\nvm4w\nodejs\node.exe C:\nvm4w\nodejs\node_modules\firebase-tools\lib\bin\firebase.js deploy --only hosting
+[debug] [2025-11-18T23:58:22.231Z] CLI Version:   14.20.0
+[debug] [2025-11-18T23:58:22.231Z] Platform:      win32
+[debug] [2025-11-18T23:58:22.231Z] Node Version:  v20.17.0
+[debug] [2025-11-18T23:58:22.231Z] Time:          Tue Nov 18 2025 17:58:22 GMT-0600 (hora estándar central)
+[debug] [2025-11-18T23:58:22.231Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-11-18T23:58:22.233Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2025-11-18T23:58:22.724Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-18T23:58:22.725Z] > authorizing via signed-in user (arosaless23@gmail.com)
+[debug] [2025-11-18T23:58:22.725Z] [iam] checking project pdi-v2 for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2025-11-18T23:58:22.726Z] Checked if tokens are valid: false, expires at: 1761180768623
+[debug] [2025-11-18T23:58:22.727Z] Checked if tokens are valid: false, expires at: 1761180768623
+[debug] [2025-11-18T23:58:22.728Z] > refreshing access token with scopes: []
+[debug] [2025-11-18T23:58:22.732Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2025-11-18T23:58:22.733Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-18T23:58:22.992Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-11-18T23:58:22.992Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2025-11-18T23:58:23.011Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2025-11-18T23:58:23.012Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2025-11-18T23:58:23.035Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/pdi-v2:testIamPermissions [none]
+[debug] [2025-11-18T23:58:23.035Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/pdi-v2:testIamPermissions x-goog-quota-user=projects/pdi-v2
+[debug] [2025-11-18T23:58:23.036Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/pdi-v2:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2025-11-18T23:58:23.372Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/pdi-v2:testIamPermissions 200
+[debug] [2025-11-18T23:58:23.372Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/pdi-v2:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2025-11-18T23:58:23.374Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:23.375Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:23.376Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/pdi-v2 [none]
+[debug] [2025-11-18T23:58:23.888Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/pdi-v2 200
+[debug] [2025-11-18T23:58:23.888Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/pdi-v2 {"projectId":"pdi-v2","projectNumber":"631665492653","displayName":"PDI-v2","name":"projects/pdi-v2","resources":{"hostingSite":"pdi-v2"},"state":"ACTIVE","etag":"1_6e39f41f-ab34-4350-ab85-14ca6cd774da"}
+[debug] [2025-11-18T23:58:34.559Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:34.559Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:34.560Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites pageToken=&pageSize=10
+[debug] [2025-11-18T23:58:34.916Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites 200
+[debug] [2025-11-18T23:58:34.916Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites {"sites":[{"name":"projects/pdi-v2/sites/pdi-v2","defaultUrl":"https://pdi-v2.web.app","type":"DEFAULT_SITE"}]}
+[debug] [2025-11-18T23:58:34.918Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:34.919Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:34.919Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites 
+[debug] [2025-11-18T23:58:35.178Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites 200
+[debug] [2025-11-18T23:58:35.178Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites {"sites":[{"name":"projects/pdi-v2/sites/pdi-v2","defaultUrl":"https://pdi-v2.web.app","type":"DEFAULT_SITE"}]}
+[debug] [2025-11-18T23:58:35.180Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:35.182Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:58:35.182Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/pdi-v2/webApps/-/config [none]
+[debug] [2025-11-18T23:58:35.668Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/pdi-v2/webApps/-/config 200
+[debug] [2025-11-18T23:58:35.668Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/pdi-v2/webApps/-/config {"projectId":"pdi-v2","storageBucket":"pdi-v2.firebasestorage.app","apiKey":"AIzaSyDOwzthW3Q8S01no-XlGCfj8-a5Sk5eeLU","authDomain":"pdi-v2.firebaseapp.com","messagingSenderId":"631665492653","projectNumber":"631665492653","version":"2"}
+[info] 
+   Thank you for trying our early preview of Next.js support on Firebase Hosting.
+   During the preview, support is best-effort and breaking changes can be expected. Proceed with caution.
+   The integration is known to work with Next.js version 12 - 15.0. You may encounter errors.
+
+   Documentation: https://firebase.google.com/docs/hosting/frameworks/nextjs
+   File a bug: https://github.com/firebase/firebase-tools/issues/new?template=bug_report.md
+   Submit a feature request: https://github.com/firebase/firebase-tools/issues/new?template=feature_request.md
+
+   We'd love to learn from you. Express your interest in helping us shape the future of Firebase Hosting: https://goo.gle/41enW5X
+
+[debug] [2025-11-18T23:59:00.561Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:59:00.561Z] Checked if tokens are valid: true, expires at: 1763513902013
+[debug] [2025-11-18T23:59:00.562Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites/pdi-v2 [none]
+[debug] [2025-11-18T23:59:00.788Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites/pdi-v2 200
+[debug] [2025-11-18T23:59:00.788Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/pdi-v2/sites/pdi-v2 {"name":"projects/pdi-v2/sites/pdi-v2","defaultUrl":"https://pdi-v2.web.app","type":"DEFAULT_SITE"}
+[info]    ▲ Next.js 15.5.6
+
+[info]    - Experiments (use with caution):
+     · clientTraceMetadata
+
+
+[info]    Creating an optimized production build ...
+
+[info] [@sentry/nextjs] It appears you've configured a `sentry.server.config.ts` file. Please ensure to put this file's content into the `register()` function of a Next.js instrumentation file instead. To ensure correct functionality of the SDK, `Sentry.init` must be called inside of an instrumentation file. Learn more about setting up an instrumentation file in Next.js: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation. You can safely delete the `sentry.server.config.ts` file afterward.
+
+[info] [@sentry/nextjs] Could not find a Next.js instrumentation file. This indicates an incomplete configuration of the Sentry SDK. An instrumentation file is required for the Sentry SDK to be initialized on the server: https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/#create-initialization-config-files (you can suppress this warning by setting SENTRY_SUPPRESS_INSTRUMENTATION_FILE_WARNING=1 as environment variable)
+
+[info] warn  - It seems like you don't have a global error handler set up. It is recommended that you add a global-error.js file with Sentry instrumentation so that React rendering errors are reported to Sentry. Read more: https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/#react-render-errors-in-app-router (you can suppress this warning by setting SENTRY_SUPPRESS_GLOBAL_ERROR_HANDLER_FILE_WARNING=1 as environment variable)
+
+[info] [@sentry/nextjs] DEPRECATION WARNING: It is recommended renaming your `sentry.client.config.ts` file, or moving its content to `instrumentation-client.ts`. When using Turbopack `sentry.client.config.ts` will no longer work. Read more about the `instrumentation-client.ts` file: https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation-client
+
+[info] uncaughtException [Error: EPERM: operation not permitted, open 'C:\Users\alfaa\CascadeProjects\Fire_db_PDI\.next\trace'] {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'open',
+  path: 'C:\\Users\\alfaa\\CascadeProjects\\Fire_db_PDI\\.next\\trace'
+}
+
+[debug] [2025-11-18T23:59:27.585Z] Error: ENOENT: no such file or directory, open 'C:\Users\alfaa\CascadeProjects\Fire_db_PDI\.next\server\middleware-manifest.json'
+[error] 
+[error] Error: An unexpected error has occurred.
