@@ -176,6 +176,25 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
       toast({ title: "Nueva diapositiva añadida." });
   }, [slide, onSave, toast]);
 
+  const handleDeleteCurrentSubSlide = useCallback(() => {
+      if (!slide || !hasContent) return;
+      if (totalSubSlides <= 1) {
+        const newContentArray: string[] = [];
+        onSave(slide.id, newContentArray);
+        setSubSlideIndex(0);
+        setIsEditing(false);
+        toast({ title: "Diapositiva eliminada." });
+        return;
+      }
+      const newContentArray = [...(slide.content || [])];
+      newContentArray.splice(subSlideIndex, 1);
+      const newIndex = Math.max(0, Math.min(subSlideIndex, newContentArray.length - 1));
+      setSubSlideIndex(newIndex);
+      setIsEditing(false);
+      onSave(slide.id, newContentArray);
+      toast({ title: "Diapositiva eliminada." });
+  }, [slide, hasContent, totalSubSlides, subSlideIndex, onSave, toast]);
+
   const handleImproveWithAI = useCallback(() => {
     const contentToImprove = isEditing ? htmlContent : currentSlideContent;
     if (!contentToImprove) {
@@ -297,11 +316,12 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
         )}
       </main>
 
-      {!isEditing && !isPresentationMode && hasContent && totalSubSlides > 1 && (
+      {!isEditing && !isPresentationMode && hasContent && totalSubSlides > 0 && (
         <footer className="bg-card p-2 flex items-center justify-center gap-4 text-foreground border-t">
           <Button onClick={() => setSubSlideIndex(i => i - 1)} disabled={subSlideIndex === 0} variant="outline" size="sm">Anterior</Button>
           <span>{subSlideIndex + 1} / {totalSubSlides}</span>
           <Button onClick={() => setSubSlideIndex(i => i + 1)} disabled={subSlideIndex >= totalSubSlides - 1} size="sm">Siguiente</Button>
+          <Button onClick={handleDeleteCurrentSubSlide} variant="destructive" size="sm">Eliminar diapositiva actual</Button>
         </footer>
       )}
       
