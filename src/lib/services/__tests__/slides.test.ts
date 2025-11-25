@@ -18,7 +18,10 @@ vi.mock('@/lib/db', () => {
 import { loadAllSlidesCached, saveSlide, deleteSlide } from '../slides';
 import * as db from '@/lib/db';
 
-const setStore = (db as any).__setStore as (v: { id: string; content: string[] | null }[]) => void;
+type MockDB = typeof db & {
+  __setStore: (v: { id: string; content: string[] | null }[]) => void;
+};
+const setStore = (db as unknown as MockDB).__setStore;
 
 describe('slides service', () => {
   beforeEach(() => {

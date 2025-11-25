@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
-import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move } from 'lucide-react';
+import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move, Bold, Italic, List, Image as ImageIcon, Code, Type, Columns } from 'lucide-react';
 import type { IndexItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,33 +9,46 @@ import { useToast } from '@/hooks/use-toast';
 import { SlideIframe } from './slide-iframe';
 // Note: avoid importing Genkit server flow directly in client to keep prod build lean.
 import { Card, CardContent } from './ui/card';
-import { Skeleton } from './ui/skeleton';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useAppContext } from './app-context'; // Import the context hook
+import { cn } from '@/lib/utils';
 
 interface ViewerPanelProps {
   slide: IndexItem | null;
   onSave: (id: string, content: string[] | null) => void;
   onRelocate: (slideId: string) => void;
-  onDelete: (slideId: string) => void;
   isPresentationMode: boolean;
   onNavigate: (slideId: string | null) => void;
   prevSlideId: string | null;
   nextSlideId: string | null;
+  breadcrumbs: IndexItem[];
 }
 
-export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentationMode, onNavigate, prevSlideId, nextSlideId }: ViewerPanelProps) {
+export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onNavigate, prevSlideId, nextSlideId, breadcrumbs }: ViewerPanelProps) {
   const [subSlideIndex, setSubSlideIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSplitView, setIsSplitView] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
   const [isImproving, startImproving] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const { togglePresentationMode } = useAppContext(); // Use the context to get the function
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
@@ -65,10 +78,11 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      const d = e.data as any;
+      const d = e.data as { __slideLog?: boolean; level?: string; args?: unknown | unknown[] };
       if (d && d.__slideLog) {
         const lvl = (d.level || 'log') as 'log' | 'warn' | 'error';
-        const args = Array.isArray(d.args) ? d.args : [d.args];
+        const rawArgs = d.args;
+        const args: unknown[] = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
         // Ensure a single [SLIDE] prefix
         if (args.length > 0 && typeof args[0] === 'string') {
           const first = args[0] as string;
@@ -78,7 +92,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
         } else {
           args.unshift('[SLIDE]');
         }
-        (console[lvl] || console.log).apply(console, args as any);
+        (console[lvl] || console.log)(...args);
       }
     };
     window.addEventListener('message', handler);
@@ -245,6 +259,34 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
     if(event.target) event.target.value = '';
   }, [slide, onSave, toast]);
 
+  const insertTag = (tag: string, wrapper = true) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = htmlContent;
+    const before = text.substring(0, start);
+    const selection = text.substring(start, end);
+    const after = text.substring(end);
+
+    let newText = '';
+    
+    if (tag === 'img') {
+        const img = '<img src="URL" alt="Descripción" class="w-full rounded-lg my-4" />';
+        newText = `${before}${img}${after}`;
+    } else if (wrapper) {
+        newText = `${before}<${tag}>${selection || 'Texto'}</${tag}>${after}`;
+    } else {
+        newText = `${before}<${tag} />${after}`;
+    }
+    
+    setHtmlContent(newText);
+    setTimeout(() => {
+        textarea.focus();
+        // Simple restore focus
+    }, 0);
+  };
+
   if (!slide) {
     return (
       <div className="flex-1 bg-background flex items-center justify-center p-8">
@@ -262,8 +304,19 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".html" className="hidden" />
       {!isPresentationMode && (
           <header className="bg-card p-2 flex items-center justify-between text-foreground border-b border-border shrink-0">
-            <h2 className="font-bold text-lg truncate px-2">{slide.title}</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col min-w-0 px-2 overflow-hidden">
+                {breadcrumbs.length > 0 && (
+                    <div className="flex items-center text-xs text-muted-foreground space-x-1 truncate">
+                        {breadcrumbs.map((b, i) => (
+                            <React.Fragment key={b.id}>
+                                {i > 0 && <span className="text-muted-foreground/40">/</span>}
+                                <span className={i === breadcrumbs.length - 1 ? "text-foreground font-medium" : ""}>{b.title}</span>
+                            </React.Fragment>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm"><PlusCircle /> Añadir</Button>
@@ -284,16 +337,44 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
 
       <main className="flex-1 overflow-y-auto">
         {isEditing ? (
-          <div className="p-4 h-full flex flex-col gap-4">
-            <Textarea value={htmlContent} onChange={(e) => setHtmlContent(e.target.value)} placeholder="Pega aquí el código HTML..." className="w-full flex-1 font-code text-sm" />
-            <div className="flex justify-between items-center">
-               <Button onClick={handleImproveWithAI} className="bg-purple-600 hover:bg-purple-500 text-white" disabled={isImproving}>
-                 {isImproving ? "Mejorando..." : <><Sparkles size={16} /> Mejorar con IA</>}
-               </Button>
-              <div className="flex gap-2">
-                <Button onClick={() => setIsEditing(false)} variant="secondary">Cancelar</Button>
-                <Button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white">Guardar</Button>
-              </div>
+          <div className="flex flex-col h-full overflow-hidden">
+             <div className="p-2 bg-muted border-b border-border flex flex-wrap gap-2 shrink-0">
+                <Button variant="ghost" size="sm" onClick={() => insertTag('b')} title="Negrita"><Bold size={16} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => insertTag('i')} title="Cursiva"><Italic size={16} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => insertTag('h2')} title="Subtítulo"><Type size={16} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => insertTag('p')} title="Párrafo"><FileText size={16} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => insertTag('ul')} title="Lista"><List size={16} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => insertTag('pre')} title="Código"><Code size={16} /></Button>
+                <Button variant="ghost" size="sm" onClick={() => insertTag('img', false)} title="Imagen"><ImageIcon size={16} /></Button>
+                <div className="w-px h-6 bg-border mx-1" />
+                <Button variant={isSplitView ? "secondary" : "ghost"} size="sm" onClick={() => setIsSplitView(!isSplitView)} title="Vista dividida"><Columns size={16} /></Button>
+            </div>
+            
+            <div className="flex-1 flex min-h-0">
+                <div className={cn("flex flex-col gap-4 p-4 h-full overflow-y-auto", isSplitView ? "w-1/2 border-r" : "w-full")}>
+                    <Textarea 
+                        ref={textareaRef}
+                        value={htmlContent} 
+                        onChange={(e) => setHtmlContent(e.target.value)} 
+                        placeholder="Pega aquí el código HTML..." 
+                        className="w-full flex-1 font-code text-sm min-h-[200px]" 
+                    />
+                    <div className="flex justify-between items-center shrink-0 pt-2">
+                    <Button onClick={handleImproveWithAI} className="bg-purple-600 hover:bg-purple-500 text-white" disabled={isImproving}>
+                        {isImproving ? "Mejorando..." : <><Sparkles size={16} /> Mejorar con IA</>}
+                    </Button>
+                    <div className="flex gap-2">
+                        <Button onClick={() => setIsEditing(false)} variant="secondary">Cancelar</Button>
+                        <Button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white">Guardar</Button>
+                    </div>
+                    </div>
+                </div>
+                
+                {isSplitView && (
+                    <div className="w-1/2 h-full overflow-y-auto bg-background p-6">
+                        <div className="prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                    </div>
+                )}
             </div>
           </div>
         ) : hasContent ? (
@@ -320,7 +401,26 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
           <Button onClick={() => setSubSlideIndex(i => i - 1)} disabled={subSlideIndex === 0} variant="outline" size="sm">Anterior</Button>
           <span>{subSlideIndex + 1} / {totalSubSlides}</span>
           <Button onClick={() => setSubSlideIndex(i => i + 1)} disabled={subSlideIndex >= totalSubSlides - 1} size="sm">Siguiente</Button>
-          <Button onClick={handleDeleteCurrentSubSlide} variant="destructive" size="sm">Eliminar diapositiva actual</Button>
+          
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm">Eliminar diapositiva actual</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción no se puede deshacer. La diapositiva actual se eliminará permanentemente.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteCurrentSubSlide} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </footer>
       )}
       

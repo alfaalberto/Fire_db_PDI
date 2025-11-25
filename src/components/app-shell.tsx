@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
 import { IndexPanel } from '@/components/index-panel';
@@ -8,7 +8,7 @@ import { ViewerPanel } from '@/components/viewer-panel';
 import { RelocateSlideModal } from '@/components/relocate-slide-modal';
 import type { IndexItem } from '@/lib/types';
 import { INDEX as INITIAL_INDEX } from '@/lib/constants';
-import { deleteSlide, loadAllSlidesCached, saveSlide } from '@/lib/services/slides';
+import { loadAllSlidesCached, saveSlide } from '@/lib/services/slides';
 import { produce } from 'immer';
 import { cn } from '@/lib/utils';
 import { AppContext } from './app-context';
@@ -32,10 +32,14 @@ function ensureUniqueIds(items: IndexItem[], parentId = '', seenIds = new Set<st
 }
 
 function stripContentFromIndex(items: IndexItem[]): IndexItem[] {
-  return items.map(({ content, children, ...rest }) => ({
-    ...rest,
-    ...(children && { children: stripContentFromIndex(children) }),
-  }));
+  return items.map((item) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { content, children, ...rest } = item;
+    return {
+      ...rest,
+      ...(children && { children: stripContentFromIndex(children) }),
+    };
+  });
 }
 
 function getStoredIndex(): IndexItem[] | null {
@@ -124,6 +128,7 @@ export default function AppShell() {
   const selectedSlideIndex = useMemo(() => flatIndex.findIndex(s => s.id === selectedSlideId), [flatIndex, selectedSlideId]);
   const prevSlideId = useMemo(() => selectedSlideIndex > 0 ? flatIndex[selectedSlideIndex - 1].id : null, [flatIndex, selectedSlideIndex]);
   const nextSlideId = useMemo(() => selectedSlideIndex < flatIndex.length - 1 ? flatIndex[selectedSlideIndex + 1].id : null, [flatIndex, selectedSlideIndex]);
+  const breadcrumbs = useMemo(() => selectedSlideId ? findPath(index, selectedSlideId) : [], [index, selectedSlideId]);
 
   const handleIndexChange = useCallback((newIndex: IndexItem[]) => {
     setIndex(newIndex);
@@ -170,33 +175,6 @@ export default function AppShell() {
     setSlideToRelocate(null);
   }, [index, slideToRelocate, handleIndexChange]);
 
-  const handleDelete = useCallback(async (slideId: string) => {
-    try {
-      await deleteSlide(slideId);
-    } catch (e) {
-      console.error('Failed to delete slide in DB:', e);
-    }
-    const newIndex = produce(index, (draft: IndexItem[]) => {
-      const result = findItemWithParent(draft, slideId);
-      if (!result) return;
-      const { item, parent } = result;
-      if (parent && parent.children) {
-        parent.children = parent.children.filter(c => c.id !== item.id);
-      } else {
-        const idx = draft.findIndex(i => i.id === item.id);
-        if (idx >= 0) draft.splice(idx, 1);
-      }
-    });
-    handleIndexChange(newIndex);
-    // Update selection
-    const flat = flattenIndex(newIndex);
-    const currentIdx = flat.findIndex(s => s.id === selectedSlideId);
-    if (currentIdx === -1) {
-      const next = flat[0]?.id ?? null;
-      setSelectedSlideId(next);
-    }
-  }, [index, selectedSlideId, handleIndexChange]);
-
   const openRelocateModal = useCallback((slideId: string) => {
     const slide = flatIndex.find(item => item.id === slideId);
     if (slide) {
@@ -210,6 +188,52 @@ export default function AppShell() {
     if (isMobile) setIsPanelOpen(false);
   }, [isMobile]);
   
+  const handleMoveItem = useCallback((dragId: string, dropId: string) => {
+    if (dragId === dropId) return;
+    const newIndex = produce(index, (draft) => {
+        const dragRes = findItemWithParent(draft, dragId);
+        const dropRes = findItemWithParent(draft, dropId);
+        if (!dragRes || !dropRes) return;
+        
+        const { item: dragItem, parent: dragParent } = dragRes;
+        const { item: dropItem, parent: dropParent } = dropRes;
+        
+        // Remove dragItem from old location
+        if (dragParent) {
+            dragParent.children = dragParent.children?.filter(c => c.id !== dragId);
+        } else {
+            const idx = draft.findIndex(c => c.id === dragId);
+            if (idx >= 0) draft.splice(idx, 1);
+        }
+        
+        // Insert before dropItem
+        if (dropParent) {
+            if (!dropParent.children) dropParent.children = [];
+            const idx = dropParent.children.findIndex(c => c.id === dropId);
+            // Handle case where dropItem was moved/removed logic if siblings (simplified)
+            // Re-find index in case mutation shifted things? 
+            // Since we removed dragItem first, indices might shift if in same array.
+            // But findIndex runs on the current state of siblings.
+            // Wait, if we removed dragItem, we need to get the ARRAY again.
+            // dropParent might be same as dragParent.
+            const freshDropParent = findItem(draft, dropParent.id);
+            if(freshDropParent && freshDropParent.children) {
+                let freshIdx = freshDropParent.children.findIndex(c => c.id === dropId);
+                if (freshIdx === -1) freshIdx = 0; 
+                freshDropParent.children.splice(freshIdx, 0, dragItem);
+            }
+            dragItem.parentId = dropParent.id;
+        } else {
+            let idx = draft.findIndex(c => c.id === dropId);
+            if (idx === -1) idx = 0;
+            draft.splice(idx, 0, dragItem);
+            dragItem.parentId = undefined;
+        }
+    });
+    setIndex(newIndex);
+    saveIndexStructureToStorage(newIndex);
+  }, [index]);
+
   if (!isLoaded) {
     return <div className="flex h-screen w-full items-center justify-center bg-background"><p className="text-foreground">Recuperando y limpiando datos...</p></div>;
   }
@@ -226,6 +250,7 @@ export default function AppShell() {
                         onSelect={handleSelectSlide}
                         activeSlideId={selectedSlideId}
                         onIndexChange={handleIndexChange}
+                        onMove={handleMoveItem}
                         />
                     </Sidebar>
                 </div>
@@ -234,11 +259,11 @@ export default function AppShell() {
                         slide={selectedSlide}
                         onSave={handleSave}
                         onRelocate={openRelocateModal}
-                        onDelete={handleDelete}
                         isPresentationMode={isPresentationMode}
                         onNavigate={setSelectedSlideId}
                         prevSlideId={prevSlideId}
                         nextSlideId={nextSlideId}
+                        breadcrumbs={breadcrumbs || []}
                     />
                 </main>
                 <div className={cn(isPresentationMode && "hidden")}>
@@ -274,6 +299,17 @@ function findItemWithParent(items: IndexItem[], id: string, parent: IndexItem | 
         if (item.children) {
             const found = findItemWithParent(item.children, id, item);
             if (found) return found;
+        }
+    }
+    return null;
+}
+
+function findPath(items: IndexItem[], id: string): IndexItem[] | null {
+    for (const item of items) {
+        if (item.id === id) return [item];
+        if (item.children) {
+            const childPath = findPath(item.children, id);
+            if (childPath) return [item, ...childPath];
         }
     }
     return null;

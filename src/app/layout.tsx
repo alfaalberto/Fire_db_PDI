@@ -1,7 +1,12 @@
 import type { Metadata } from 'next';
+import { Inter, Source_Code_Pro } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { SwRegister } from "@/components/sw-register";
+import { ThemeProvider } from "@/components/theme-provider";
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const sourceCodePro = Source_Code_Pro({ subsets: ['latin'], variable: '--font-code' });
 
 export const metadata: Metadata = {
   title: 'Procesamiento Digital de Imágenes',
@@ -14,17 +19,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark">
+    <html lang="es" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="font-body antialiased bg-background">
-        {children}
-        <Toaster />
-        <SwRegister />
+      <body className={`${inter.variable} ${sourceCodePro.variable} font-body antialiased bg-background`}>
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+        >
+            {children}
+            <Toaster />
+            <SwRegister />
+        </ThemeProvider>
       </body>
     </html>
   );
