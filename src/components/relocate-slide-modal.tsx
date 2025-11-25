@@ -22,15 +22,28 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
   useEffect(() => {
     if (slide) {
       setNewParentId(slide.parentId || null);
-      
       const siblings = slide.parentId
         ? findItem(index, slide.parentId)?.children || []
         : index.filter(item => !item.parentId);
-      
+
       const currentPosition = siblings.findIndex(item => item.id === slide.id);
       setNewPosition(currentPosition >= 0 ? currentPosition : 0);
     }
   }, [slide, index]);
+
+  useEffect(() => {
+    if (!slide) return;
+
+    const selectedParent = newParentId ? findItem(index, newParentId) : null;
+    const siblings = selectedParent ? selectedParent.children || [] : index.filter(item => !item.parentId);
+
+    if (newParentId !== slide.parentId) {
+      setNewPosition(Math.max(0, siblings.length));
+    } else {
+      const currentPosition = siblings.findIndex(item => item.id === slide.id);
+      setNewPosition(currentPosition >= 0 ? currentPosition : 0);
+    }
+  }, [newParentId, slide, index]);
 
   if (!slide) return null;
 
@@ -39,6 +52,13 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
   
   const selectedParent = newParentId ? findItem(index, newParentId) : null;
   const siblings = selectedParent ? selectedParent.children || [] : index.filter(item => !item.parentId);
+
+  const currentParent = slide.parentId ? findItem(index, slide.parentId) : null;
+  const currentSiblings = slide.parentId
+    ? findItem(index, slide.parentId)?.children || []
+    : index.filter(item => !item.parentId);
+  const currentPosition = currentSiblings.findIndex(item => item.id === slide.id);
+  const currentSiblingsCount = currentSiblings.length;
 
   const maxPosition = newParentId === slide.parentId 
     ? Math.max(0, siblings.length -1)
@@ -59,6 +79,9 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <p className="text-xs text-muted-foreground">
+            Ubicación actual: {currentParent ? currentParent.title : 'Nivel principal (sin contenedor)'} · posición {currentPosition + 1} de {currentSiblingsCount}
+          </p>
           <div>
             <Label htmlFor="parent-select">Nueva sección contenedora</Label>
             <Select onValueChange={(val) => setNewParentId(val === 'root' ? null : val)} defaultValue={slide.parentId || 'root'}>
@@ -89,6 +112,11 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
                 ))}
               </SelectContent>
             </Select>
+            {siblings.length > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Esta sección tiene {siblings.length} diapositiva{siblings.length === 1 ? '' : 's'}. La diapositiva se moverá a la posición {newPosition + 1}.
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>

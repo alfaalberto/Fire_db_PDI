@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
-import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move, Trash2 } from 'lucide-react';
+import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move } from 'lucide-react';
 import type { IndexItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -275,7 +275,6 @@ export function ViewerPanel({ slide, onSave, onRelocate, onDelete, isPresentatio
               </DropdownMenu>
               {hasContent && !isEditing && <Button onClick={() => setIsEditing(true)} size="sm"><Edit /> Editar</Button>}
               {hasContent && <Button onClick={() => onRelocate(slide.id)} variant="outline" size="sm"><Move /> Reubicar</Button>}
-              {hasContent && <Button onClick={() => onDelete(slide.id)} variant="destructive" size="sm" title="Eliminar diapositiva"><Trash2 /> Eliminar</Button>}
               <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!hasContent} title="Modo presentación">
                 <Maximize size={18} />
               </Button>
