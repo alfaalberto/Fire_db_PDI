@@ -44,6 +44,8 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   const [subSlideIndex, setSubSlideIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [isSplitView, setIsSplitView] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState(1);
   const [htmlContent, setHtmlContent] = useState('');
   const [isImproving, startImproving] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +134,20 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   const currentSlideContent = hasContent ? (slide.content?.[subSlideIndex] || '') : '';
   const totalSubSlides = hasContent ? slide.content!.length : 0;
 
+  const deleteTitle = deleteConfirmStep === 1
+    ? '¿Estás seguro?'
+    : deleteConfirmStep === 2
+    ? 'Confirmación adicional'
+    : 'Confirmación final';
+
+  const deleteDescription = deleteConfirmStep === 1
+    ? 'Esta acción borrará la diapositiva actual (sección de este tema del temario).'
+    : deleteConfirmStep === 2
+    ? 'Si continúas, perderás el contenido de esta diapositiva. Asegúrate de tener una copia de seguridad (Backup).'
+    : 'Último aviso: la diapositiva actual se eliminará y no se podrá recuperar desde la aplicación.';
+
+  const deleteActionLabel = deleteConfirmStep < 3 ? 'Continuar' : 'Eliminar definitivamente';
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
         if (!hasContent) return;
@@ -208,6 +224,24 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
       onSave(slide.id, newContentArray);
       toast({ title: "Diapositiva eliminada." });
   }, [slide, hasContent, totalSubSlides, subSlideIndex, onSave, toast]);
+
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+      setDeleteDialogOpen(open);
+      if (!open) {
+        setDeleteConfirmStep(1);
+      }
+  }, []);
+
+  const handleDeleteConfirmClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+      if (deleteConfirmStep < 3) {
+        event.preventDefault();
+        setDeleteConfirmStep((prev) => prev + 1);
+        return;
+      }
+      handleDeleteCurrentSubSlide();
+      setDeleteDialogOpen(false);
+      setDeleteConfirmStep(1);
+  }, [deleteConfirmStep, handleDeleteCurrentSubSlide]);
 
   const handleImproveWithAI = useCallback(() => {
     const contentToImprove = isEditing ? htmlContent : currentSlideContent;
@@ -402,21 +436,21 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
           <span>{subSlideIndex + 1} / {totalSubSlides}</span>
           <Button onClick={() => setSubSlideIndex(i => i + 1)} disabled={subSlideIndex >= totalSubSlides - 1} size="sm">Siguiente</Button>
           
-          <AlertDialog>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" size="sm">Eliminar diapositiva actual</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                <AlertDialogTitle>{deleteTitle}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Esta acción no se puede deshacer. La diapositiva actual se eliminará permanentemente.
+                  {deleteDescription}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteCurrentSubSlide} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                  Eliminar
+                <AlertDialogAction onClick={handleDeleteConfirmClick} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  {deleteActionLabel}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
