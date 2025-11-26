@@ -137,8 +137,7 @@ export default function AppShell() {
   useEffect(() => {
     async function restoreData() {
       try {
-        let storedIndexStructure = ensureAllInitialTopics(getStoredIndex(), INITIAL_INDEX);
-        storedIndexStructure = ensureUniqueIds(storedIndexStructure);
+        let storedIndexStructure = ensureUniqueIds(INITIAL_INDEX);
         const allSlides = await loadAllSlidesCached();
         const contentMap = new Map<string, string[] | null>();
         allSlides.forEach(slide => contentMap.set(slide.id, slide.content));
