@@ -71,6 +71,59 @@ function mapContentToIndex(items: IndexItem[], contentMap: Map<string, string[] 
   });
 }
 
+function ensureAllInitialTopics(stored: IndexItem[] | null, initial: IndexItem[]): IndexItem[] {
+  const result: IndexItem[] = stored ? [...stored] : [];
+  const byId = new Map<string, IndexItem>();
+
+  function register(nodes: IndexItem[]) {
+    for (const node of nodes) {
+      byId.set(node.id, node);
+      if (node.children) {
+        register(node.children);
+      }
+    }
+  }
+
+  register(result);
+
+  function ensureNode(initialNode: IndexItem, parentId: string | null) {
+    let existing = byId.get(initialNode.id);
+    if (!existing) {
+      const newNode: IndexItem = {
+        id: initialNode.id,
+        title: initialNode.title,
+      };
+      if (parentId) {
+        const parent = byId.get(parentId);
+        if (parent) {
+          if (!parent.children) parent.children = [];
+          parent.children.push(newNode);
+        } else {
+          result.push(newNode);
+        }
+      } else {
+        result.push(newNode);
+      }
+      byId.set(initialNode.id, newNode);
+      existing = newNode;
+    }
+    if (initialNode.children && initialNode.children.length > 0) {
+      if (!existing.children) {
+        existing.children = [];
+      }
+      for (const child of initialNode.children) {
+        ensureNode(child, initialNode.id);
+      }
+    }
+  }
+
+  for (const root of initial) {
+    ensureNode(root, null);
+  }
+
+  return result;
+}
+
 export default function AppShell() {
   const isMobile = useIsMobile();
   const [index, setIndex] = useState<IndexItem[]>([]);
@@ -84,7 +137,7 @@ export default function AppShell() {
   useEffect(() => {
     async function restoreData() {
       try {
-        let storedIndexStructure = getStoredIndex() || INITIAL_INDEX;
+        let storedIndexStructure = ensureAllInitialTopics(getStoredIndex(), INITIAL_INDEX);
         storedIndexStructure = ensureUniqueIds(storedIndexStructure);
         const allSlides = await loadAllSlidesCached();
         const contentMap = new Map<string, string[] | null>();
