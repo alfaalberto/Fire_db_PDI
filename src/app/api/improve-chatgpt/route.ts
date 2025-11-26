@@ -1,44 +1,11 @@
+import { NextRequest, NextResponse } from 'next/server';
 
-// src/ai/flows/improve-html-with-ai.ts
-'use server';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-/**
- * @fileOverview This file defines a Genkit flow to improve HTML content using AI.
- *
- * - improveHtmlWithAI - A function that takes HTML content as input and returns improved HTML.
- * - ImproveHtmlWithAIInput - The input type for the improveHtmlWithAI function.
- * - ImproveHtmlWithAIOutput - The return type for the improveHtmlWithAI function.
- */
-
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
-
-const ImproveHtmlWithAIInputSchema = z.object({
-  htmlContent: z
-    .string()
-    .describe('The HTML content to be improved.'),
-});
-export type ImproveHtmlWithAIInput = z.infer<typeof ImproveHtmlWithAIInputSchema>;
-
-const ImproveHtmlWithAIOutputSchema = z.object({
-  improvedHtml: z
-    .string()
-    .describe('The improved HTML content.'),
-});
-export type ImproveHtmlWithAIOutput = z.infer<typeof ImproveHtmlWithAIOutputSchema>;
-
-export async function improveHtmlWithAI(input: ImproveHtmlWithAIInput): Promise<ImproveHtmlWithAIOutput> {
-  return improveHtmlWithAIFlow(input);
-}
-
-const improveHtmlWithAIPrompt = ai.definePrompt({
-  name: 'improveHtmlWithAIPrompt',
-  input: {schema: ImproveHtmlWithAIInputSchema},
-  output: {schema: ImproveHtmlWithAIOutputSchema},
-  prompt: `Renderiza completamente las diapositivas de entrada preservando TODA la información visual, textual y matemática, sobre todo en las ecuaciones para que no se vean mal estructuradas ni acomodadas. Enriquece, completa, corrige y mejora el HTML para lograr una presentación profesional de nivel académico, añadiendo simulaciones, animaciones e interactividad cuando aporten valor. Corrige cualquier representación en bruto (por ejemplo, fórmulas LaTeX visibles como texto) para que se rendericen correctamente. No uses mermaid.
+const BASE_PROMPT = `Renderiza completamente las diapositivas de entrada preservando TODA la información visual, textual y matemática, sobre todo en las ecuaciones para que no se vean mal estructuradas ni acomodadas. Enriquece, completa, corrige y mejora el HTML para lograr una presentación profesional de nivel académico, añadiendo simulaciones, animaciones e interactividad cuando aporten valor. Corrige cualquier representación en bruto (por ejemplo, fórmulas LaTeX visibles como texto) para que se rendericen correctamente. No uses mermaid.
 
 ENTRADA
-{{{htmlContent}}}
+{{HTML_INPUT}}
 
 ALCANCE Y REQUISITOS ESTRICTOS
 1) Conservación total del contenido:
@@ -128,17 +95,55 @@ SI FALTA INFORMACIÓN
 - Mantén el armazón funcional para que yo solo reemplace el contenido faltante.
 
 PRODUCE AHORA el resultado siguiendo todo lo anterior.
-`,
-});
+`;
 
-const improveHtmlWithAIFlow = ai.defineFlow(
-  {
-    name: 'improveHtmlWithAIFlow',
-    inputSchema: ImproveHtmlWithAIInputSchema,
-    outputSchema: ImproveHtmlWithAIOutputSchema,
-  },
-  async input => {
-    const {output} = await improveHtmlWithAIPrompt(input);
-    return output!;
+export async function POST(req: NextRequest) {
+  try {
+    const { htmlContent } = await req.json();
+    if (typeof htmlContent !== 'string') {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    }
+
+    if (!OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY is not set. Returning original HTML.');
+      return NextResponse.json({ improvedHtml: htmlContent });
+    }
+
+    const fullPrompt = BASE_PROMPT.replace('{{HTML_INPUT}}', htmlContent);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: fullPrompt,
+          },
+        ],
+        temperature: 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('OpenAI API error:', response.status, await response.text());
+      return NextResponse.json({ improvedHtml: htmlContent });
+    }
+
+    const data = await response.json();
+    const improvedHtml = data.choices?.[0]?.message?.content?.trim();
+
+    if (!improvedHtml) {
+      return NextResponse.json({ improvedHtml: htmlContent });
+    }
+
+    return NextResponse.json({ improvedHtml });
+  } catch (e) {
+    console.error('Error in /api/improve-chatgpt:', e);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
-);
+}

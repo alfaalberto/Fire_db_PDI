@@ -47,7 +47,8 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmStep, setDeleteConfirmStep] = useState(1);
   const [htmlContent, setHtmlContent] = useState('');
-  const [isImproving, startImproving] = useTransition();
+  const [isImprovingGemini, startImprovingGemini] = useTransition();
+  const [isImprovingChatGPT, startImprovingChatGPT] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -243,13 +244,13 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
       setDeleteConfirmStep(1);
   }, [deleteConfirmStep, handleDeleteCurrentSubSlide]);
 
-  const handleImproveWithAI = useCallback(() => {
+  const handleImproveWithGemini = useCallback(() => {
     const contentToImprove = isEditing ? htmlContent : currentSlideContent;
     if (!contentToImprove) {
       toast({ title: "No hay código para mejorar.", variant: "destructive" });
       return;
     }
-    startImproving(async () => {
+    startImprovingGemini(async () => {
       try {
         const res = await fetch('/api/improve', {
           method: 'POST',
@@ -261,13 +262,42 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
         if (result && result.improvedHtml) {
           setHtmlContent(result.improvedHtml);
           setIsEditing(true);
-          toast({ title: "Contenido mejorado con IA.", description: "Revisa los cambios y guarda." });
+          toast({ title: "Contenido mejorado con Gemini.", description: "Revisa los cambios y guarda." });
         } else {
           throw new Error("La respuesta de la IA no contiene HTML.");
         }
       } catch (error) {
         console.error("Error al mejorar con IA:", error);
         toast({ title: "Error de IA", description: (error as Error).message, variant: "destructive" });
+      }
+    });
+  }, [htmlContent, currentSlideContent, isEditing, toast]);
+
+  const handleImproveWithChatGPT = useCallback(() => {
+    const contentToImprove = isEditing ? htmlContent : currentSlideContent;
+    if (!contentToImprove) {
+      toast({ title: "No hay código para mejorar.", variant: "destructive" });
+      return;
+    }
+    startImprovingChatGPT(async () => {
+      try {
+        const res = await fetch('/api/improve-chatgpt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ htmlContent: contentToImprove })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const result = await res.json() as { improvedHtml?: string };
+        if (result && result.improvedHtml) {
+          setHtmlContent(result.improvedHtml);
+          setIsEditing(true);
+          toast({ title: "Contenido mejorado con ChatGPT.", description: "Revisa los cambios y guarda." });
+        } else {
+          throw new Error("La respuesta de ChatGPT no contiene HTML.");
+        }
+      } catch (error) {
+        console.error("Error al mejorar con ChatGPT:", error);
+        toast({ title: "Error de ChatGPT", description: (error as Error).message, variant: "destructive" });
       }
     });
   }, [htmlContent, currentSlideContent, isEditing, toast]);
@@ -394,9 +424,22 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
                         className="w-full flex-1 font-code text-sm min-h-[200px]" 
                     />
                     <div className="flex justify-between items-center shrink-0 pt-2">
-                    <Button onClick={handleImproveWithAI} className="bg-purple-600 hover:bg-purple-500 text-white" disabled={isImproving}>
-                        {isImproving ? "Mejorando..." : <><Sparkles size={16} /> Mejorar con IA</>}
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                          onClick={handleImproveWithGemini}
+                          className="bg-purple-600 hover:bg-purple-500 text-white"
+                          disabled={isImprovingGemini || isImprovingChatGPT}
+                        >
+                          {isImprovingGemini ? "Mejorando (Gemini)..." : <><Sparkles size={16} /> Mejorar con Gemini</>}
+                        </Button>
+                        <Button
+                          onClick={handleImproveWithChatGPT}
+                          variant="outline"
+                          disabled={isImprovingGemini || isImprovingChatGPT}
+                        >
+                          {isImprovingChatGPT ? "Mejorando (ChatGPT)..." : <><Sparkles size={16} /> Mejorar con ChatGPT</>}
+                        </Button>
+                    </div>
                     <div className="flex gap-2">
                         <Button onClick={() => setIsEditing(false)} variant="secondary">Cancelar</Button>
                         <Button onClick={handleSave} className="bg-green-600 hover:bg-green-500 text-white">Guardar</Button>
