@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useRef } from 'react';
-import { BookOpen, Search, Download, Upload, X } from 'lucide-react';
+import { BookOpen, Search, Download, Upload, X, RefreshCw } from 'lucide-react';
 import type { IndexItem as IndexItemType } from '@/lib/types';
 import { IndexItem } from './index-item';
 import { SidebarHeader, SidebarContent, SidebarFooter } from '@/components/ui/sidebar';
@@ -134,6 +134,9 @@ export function IndexPanel({ data, activeSlideId, onSelect, onIndexChange, onMov
             </Button>
             <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
         </div>
+        <Button variant="ghost" size="sm" className="w-full mb-2" onClick={() => window.location.reload()} title="Recargar datos desde DB">
+            <RefreshCw className="mr-2 h-3 w-3" /> Sincronizar Datos
+        </Button>
         <div className="text-xs text-muted-foreground text-center">
           <p>Visor v1.14 · Oppenheim</p>
         </div>

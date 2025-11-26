@@ -93,12 +93,17 @@ export default function AppShell() {
         const allIndexIds = new Set(flattenIndex(restoredIndex).map(i => i.id));
         const orphanSlides = allSlides.filter(s => !allIndexIds.has(s.id));
         if (orphanSlides.length > 0) {
-          const orphanIndexItems: IndexItem[] = orphanSlides.map(s => ({
-              id: s.id,
-              title: `(Recuperado) ${s.id}`,
-              content: s.content,
-          }));
-          restoredIndex = [...restoredIndex, ...orphanIndexItems];
+          console.log(`[AppShell] Encontradas ${orphanSlides.length} diapositivas huérfanas en BD.`);
+          const recoveredFolder: IndexItem = {
+              id: `recovered-folder-${Date.now()}`,
+              title: '📂 ARCHIVOS RECUPERADOS DE BD',
+              children: orphanSlides.map(s => ({
+                  id: s.id,
+                  title: s.id, // Si tuviéramos un campo título en BD sería mejor, pero usamos ID
+                  content: s.content,
+              }))
+          };
+          restoredIndex = [...restoredIndex, recoveredFolder];
         }
         setIndex(restoredIndex);
         saveIndexStructureToStorage(restoredIndex);
