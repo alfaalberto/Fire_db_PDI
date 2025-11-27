@@ -6,4 +6,24 @@ runConfig:
   # more instances in response to increased traffic.
   maxInstances: 2
 
+env:
+  # Activa las mejoras con IA tanto en build como en runtime
+  - variable: NEXT_PUBLIC_ENABLE_AI
+    value: "true"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Clave de OpenAI usada por /api/improve-chatgpt (servidor)
+  - variable: OPENAI_API_KEY
+    secret: OPENAI_API_KEY
+    availability:
+      - RUNTIME
+
+  # Clave de Gemini usada por Genkit (servidor)
+  - variable: GOOGLE_GENAI_API_KEY
+    secret: GOOGLE_GENAI_API_KEY
+    availability:
+      - RUNTIME
+
 # Triggering a new build to resolve compilation error by ensuring all code is pushed to the repository.
