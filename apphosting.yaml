@@ -21,9 +21,9 @@ env:
       - RUNTIME
 
   # Clave de Gemini usada por Genkit (servidor)
-  - variable: GOOGLE_GENAI_API_KEY
-    secret: GOOGLE_GENAI_API_KEY
-    availability:
-      - RUNTIME
+  # - variable: GOOGLE_GENAI_API_KEY
+  #   secret: GOOGLE_GENAI_API_KEY
+  #   availability:
+  #     - RUNTIME
 
 # Triggering a new build to resolve compilation error by ensuring all code is pushed to the repository.
