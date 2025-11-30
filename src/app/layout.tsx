@@ -11,6 +11,17 @@ const sourceCodePro = Source_Code_Pro({ subsets: ['latin'], variable: '--font-co
 export const metadata: Metadata = {
   title: 'Procesamiento Digital de Imágenes',
   description: 'Visor de Presentaciones para Procesamiento Digital de Imágenes',
+  openGraph: {
+    title: 'Procesamiento Digital de Imágenes',
+    description: 'Visor de Presentaciones para Procesamiento Digital de Imágenes',
+    type: 'website',
+    locale: 'es_ES',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Procesamiento Digital de Imágenes',
+    description: 'Visor de Presentaciones para Procesamiento Digital de Imágenes',
+  },
 };
 
 export default function RootLayout({
@@ -25,14 +36,14 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${sourceCodePro.variable} font-body antialiased bg-background`}>
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
         >
-            {children}
-            <Toaster />
-            <SwRegister />
+          {children}
+          <Toaster />
+          <SwRegister />
         </ThemeProvider>
       </body>
     </html>

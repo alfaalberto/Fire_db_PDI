@@ -5,8 +5,7 @@ const isGithubPages = process.env.GITHUB_PAGES === 'true';
 const repo = process.env.REPO_NAME || '';
 
 const nextConfig: NextConfig = {
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
+
   output: isGithubPages ? 'export' : undefined,
   images: {
     unoptimized: !!isGithubPages,
