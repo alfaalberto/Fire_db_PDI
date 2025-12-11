@@ -133,6 +133,7 @@ export default function AppShell() {
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [relocateModalOpen, setRelocateModalOpen] = useState(false);
   const [slideToRelocate, setSlideToRelocate] = useState<IndexItem | null>(null);
+  const [firestoreWriteDisabled, setFirestoreWriteDisabled] = useState(false);
 
   useEffect(() => {
     async function restoreData() {
@@ -192,18 +193,43 @@ export default function AppShell() {
     saveIndexStructureToStorage(newIndex);
   }, []);
 
-  const handleSave = useCallback(async (id: string, content: string[] | null) => {
-    try {
-      await saveSlide(id, content);
-      const newIndex = produce(index, (draft: IndexItem[]) => {
-        const item = findItem(draft, id);
-        if (item) item.content = content;
-      });
-      setIndex(newIndex);
-    } catch (error) {
-      console.error("Failed to save slide:", error);
-    }
-  }, [index]);
+  const handleSave = useCallback(
+    async (id: string, content: string[] | null) => {
+      const applyLocalUpdate = () => {
+        setIndex(prev =>
+          produce(prev, (draft: IndexItem[]) => {
+            const item = findItem(draft, id);
+            if (item) item.content = content;
+          }),
+        );
+      };
+
+      if (firestoreWriteDisabled) {
+        console.warn(
+          'Skipping remote save for slide because Firestore writes are temporarily disabled after resource-exhausted.',
+          { id },
+        );
+        applyLocalUpdate();
+        return;
+      }
+
+      try {
+        await saveSlide(id, content);
+        applyLocalUpdate();
+      } catch (error) {
+        console.error("Failed to save slide:", error);
+        const code = (error as { code?: string }).code;
+        if (code === "resource-exhausted") {
+          console.error(
+            "Disabling further Firestore writes for this session after resource-exhausted error.",
+          );
+          setFirestoreWriteDisabled(true);
+          applyLocalUpdate();
+        }
+      }
+    },
+    [firestoreWriteDisabled],
+  );
 
   const handleRelocate = useCallback((newParentId: string | null, newPosition: number) => {
     if (!slideToRelocate) return;

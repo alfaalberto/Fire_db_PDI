@@ -3,6 +3,38 @@
 import React, { forwardRef, useEffect, useMemo } from 'react';
 import { sanitizeHtml } from '@/lib/sanitize';
 
+function stripBBoxWrappers(input: string): string {
+  const pattern = /\\bbox\s*(\[[^\]]*\])?\s*{/g;
+  let result = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(input)) !== null) {
+    result += input.slice(lastIndex, match.index);
+    let idx = match.index + match[0].length;
+    let depth = 1;
+    while (idx < input.length && depth > 0) {
+      const char = input[idx];
+      if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+      }
+      idx += 1;
+    }
+    if (depth === 0) {
+      result += input.slice(match.index + match[0].length, idx - 1);
+      lastIndex = idx;
+    } else {
+      result += input.slice(match.index, idx);
+      lastIndex = idx;
+      break;
+    }
+  }
+  result += input.slice(lastIndex);
+  return result;
+}
+
 interface SlideIframeProps {
   content: string;
   title: string;
@@ -10,7 +42,42 @@ interface SlideIframeProps {
 
 export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ content, title }, ref) => {
   const trustSlides = process.env.NEXT_PUBLIC_TRUST_SLIDES !== 'false';
-  const safeContent = trustSlides ? content : sanitizeHtml(content);
+  const { headHtml, bodyHtml } = useMemo(() => {
+    let html = trustSlides ? content : sanitizeHtml(content);
+    html = html.replace(/<script\b[^>]*id=["']MathJax-script["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    html = html.replace(/<script\b[^>]*src=["'][^"']*mathjax[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    html = html.replace(/<script\b[^>]*src=["'][^"']*polyfill\.io[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    html = html.replace(/<!doctype[^>]*>/gi, '');
+    html = stripBBoxWrappers(html);
+
+    let extractedHead = '';
+    let extractedBody = '';
+
+    if (typeof window !== 'undefined' && 'DOMParser' in window) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        if (doc.head) {
+          extractedHead = doc.head.innerHTML || '';
+        }
+        if (doc.body && doc.body.innerHTML.trim()) {
+          extractedBody = doc.body.innerHTML;
+        } else {
+          extractedBody = html
+            .replace(/<\/?.?html[^>]*>/gi, '')
+            .replace(/<\/?.?head[^>]*>/gi, '')
+            .replace(/<\/?.?body[^>]*>/gi, '');
+        }
+      } catch {
+        extractedBody = html;
+      }
+    } else {
+      extractedBody = html;
+    }
+
+    return { headHtml: extractedHead, bodyHtml: extractedBody };
+  }, [content, trustSlides]);
+
   const baseHref = typeof window !== 'undefined' ? `${window.location.origin}/` : '/';
   const fullHtml = `
       <!DOCTYPE html>
@@ -24,6 +91,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           <link rel="stylesheet" href="/katex/katex.min.css">
           <script defer src="/katex/katex.min.js"></script>
           <script defer src="/katex/contrib/auto-render.min.js"></script>
+          <script defer src="/katex/contrib/mathtex-script-type.min.js"></script>
           <script>
             (function(){
               function inject(src, onload, onerror){
@@ -45,7 +113,13 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
               }
               var levels=['log','warn','error'];
               for(var i=0;i<levels.length;i++){(function(n){var o=console[n];console[n]=function(){send(n,arguments);if(o) o.apply(console,arguments);};})(levels[i]);}
-              window.addEventListener('error',function(e){send('error',[e.message,e.filename,e.lineno,e.colno]);});
+              window.addEventListener('error',function(e){
+                var msg = e.message || '';
+                if (msg.indexOf('SyntaxError') !== -1 && e.filename && e.filename.indexOf('blob:') === 0) {
+                  return;
+                }
+                send('error',[e.message,e.filename,e.lineno,e.colno]);
+              });
               window.addEventListener('unhandledrejection',function(e){send('error',['unhandledrejection',e.reason&& (e.reason.stack||e.reason.message||String(e.reason))]);});
             })();
           </script>
@@ -118,6 +192,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
               if(document.readyState==='complete' || document.readyState==='interactive') setTimeout(initMermaid,0); else document.addEventListener('DOMContentLoaded',initMermaid);
             })();
           </script>
+          ${headHtml}
           <style>
             *, *::before, *::after {
               box-sizing: border-box;
@@ -151,9 +226,37 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                                   {left: '\\(', right: '\\)', display: false},
                                   {left: '\\[', right: '\\]', display: true}
                               ],
-                              throwOnError : false,
-                              strict: 'ignore'
+                              throwOnError: false,
+                              errorColor: '#f87171',
+                              strict: 'ignore',
+                              trust: true,
+                              macros: {
+                                  '\\R': '\\mathbb{R}',
+                                  '\\N': '\\mathbb{N}',
+                                  '\\Z': '\\mathbb{Z}',
+                                  '\\C': '\\mathbb{C}',
+                                  '\\F': '\\mathcal{F}',
+                                  '\\Laplace': '\\mathcal{L}',
+                                  '\\fourier': '\\mathfrak{F}',
+                                  '\\Re': '\\operatorname{Re}',
+                                  '\\Im': '\\operatorname{Im}'
+                              },
+                              ignoredTags: ['script', 'noscript', 'style', 'textarea', 'option']
                           });
+                          try {
+                              var mathBlocks = Array.prototype.slice.call(document.querySelectorAll('code, pre'));
+                              mathBlocks.forEach(function(block) {
+                                  if (!block.querySelector('.katex')) return;
+                                  var parent = block.parentElement;
+                                  if (!parent) return;
+                                  while (block.firstChild) {
+                                      parent.insertBefore(block.firstChild, block);
+                                  }
+                                  parent.removeChild(block);
+                              });
+                          } catch (unwrapErr) {
+                              try { console.warn('Failed to unwrap KaTeX from code/pre blocks', unwrapErr); } catch (_) {}
+                          }
                       } else {
                           try { console.warn('KaTeX auto-render not available; skipping math rendering'); } catch (e) {}
                       }
@@ -164,7 +267,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           </script>
       </head>
       <body>
-          ${safeContent}
+          ${bodyHtml}
       </body>
       </html>
   `;

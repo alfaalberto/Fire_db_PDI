@@ -47,6 +47,8 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmStep, setDeleteConfirmStep] = useState(1);
   const [htmlContent, setHtmlContent] = useState('');
+  const [aiUserInstructions, setAiUserInstructions] = useState('');
+  const [lastAiOriginalHtml, setLastAiOriginalHtml] = useState<string | null>(null);
   const [isImprovingGemini, startImprovingGemini] = useTransition();
   const [isImprovingChatGPT, startImprovingChatGPT] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +66,8 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     if (prevId !== currentId && currentId !== null) {
       try { console.log('[VIEWER] slide id changed', { prevId, currentId, action: 'resetSubSlideIndex' }); } catch {}
       setSubSlideIndex(0);
+      setLastAiOriginalHtml(null);
+      setAiUserInstructions('');
     }
     // Only exit edit mode when moving between two valid, different slide ids
     if (prevId !== null && currentId !== null && prevId !== currentId) {
@@ -118,13 +122,16 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     if (!isEditing || !slide) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      const newContentArray = [...(slide.content || [])];
-      if (newContentArray.length === 0) {
-        newContentArray.push(htmlContent);
-      } else {
-        newContentArray[subSlideIndex] = htmlContent;
+      const currentSavedContent = slide.content && slide.content.length > 0 ? (slide.content[subSlideIndex] || '') : '';
+      if (htmlContent !== currentSavedContent) {
+        const newContentArray = [...(slide.content || [])];
+        if (newContentArray.length === 0) {
+          newContentArray.push(htmlContent);
+        } else {
+          newContentArray[subSlideIndex] = htmlContent;
+        }
+        onSave(slide.id, newContentArray);
       }
-      onSave(slide.id, newContentArray);
     }, 800);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -255,11 +262,17 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
         const res = await fetch('/api/improve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ htmlContent: contentToImprove })
+          body: JSON.stringify({ htmlContent: contentToImprove, userInstructions: aiUserInstructions || undefined })
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json() as { improvedHtml?: string };
+        
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(result.error || `HTTP ${res.status}`);
+        }
+
         if (result && result.improvedHtml) {
+          setLastAiOriginalHtml(contentToImprove);
           setHtmlContent(result.improvedHtml);
           setIsEditing(true);
           toast({ title: "Contenido mejorado con Gemini.", description: "Revisa los cambios y guarda." });
@@ -271,7 +284,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
         toast({ title: "Error de IA", description: (error as Error).message, variant: "destructive" });
       }
     });
-  }, [htmlContent, currentSlideContent, isEditing, toast]);
+  }, [htmlContent, currentSlideContent, isEditing, toast, aiUserInstructions]);
 
   const handleImproveWithChatGPT = useCallback(() => {
     const contentToImprove = isEditing ? htmlContent : currentSlideContent;
@@ -284,11 +297,17 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
         const res = await fetch('/api/improve-chatgpt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ htmlContent: contentToImprove })
+          body: JSON.stringify({ htmlContent: contentToImprove, userInstructions: aiUserInstructions || undefined })
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json() as { improvedHtml?: string };
+
+        const result = await res.json();
+
+        if (!res.ok) {
+           throw new Error(result.error || `HTTP ${res.status}`);
+        }
+
         if (result && result.improvedHtml) {
+          setLastAiOriginalHtml(contentToImprove);
           setHtmlContent(result.improvedHtml);
           setIsEditing(true);
           toast({ title: "Contenido mejorado con ChatGPT.", description: "Revisa los cambios y guarda." });
@@ -301,6 +320,14 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
       }
     });
   }, [htmlContent, currentSlideContent, isEditing, toast]);
+
+  const handleUndoAI = useCallback(() => {
+    if (!slide || lastAiOriginalHtml === null) return;
+    setHtmlContent(lastAiOriginalHtml);
+    setIsEditing(true);
+    setLastAiOriginalHtml(null);
+    toast({ title: "Cambios de IA deshechos.", description: "Se restauró la versión anterior al uso de IA." });
+  }, [slide, lastAiOriginalHtml, toast]);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -423,6 +450,18 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
                         placeholder="Pega aquí el código HTML..." 
                         className="w-full flex-1 font-code text-sm min-h-[200px]" 
                     />
+                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      <label className="font-medium text-foreground" htmlFor="ai-user-instructions">
+                        Instrucciones para la IA (opcional)
+                      </label>
+                      <Textarea
+                        id="ai-user-instructions"
+                        value={aiUserInstructions}
+                        onChange={(e) => setAiUserInstructions(e.target.value)}
+                        placeholder="Ejemplos: 'usa un estilo muy visual', 'pon ejemplos de termodinámica', 'simplifica el lenguaje pero no quites fórmulas'"
+                        className="w-full font-sans text-xs min-h-[60px]"
+                      />
+                    </div>
                     <div className="flex justify-between items-center shrink-0 pt-2">
                     <div className="flex gap-2">
                         <Button
@@ -438,6 +477,13 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
                           disabled={isImprovingGemini || isImprovingChatGPT}
                         >
                           {isImprovingChatGPT ? "Mejorando (ChatGPT)..." : <><Sparkles size={16} /> Mejorar con ChatGPT</>}
+                        </Button>
+                        <Button
+                          onClick={handleUndoAI}
+                          variant="outline"
+                          disabled={!lastAiOriginalHtml}
+                        >
+                          Deshacer IA
                         </Button>
                     </div>
                     <div className="flex gap-2">

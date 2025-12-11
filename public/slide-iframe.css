@@ -90,6 +90,40 @@ blockquote { border-left: 3px solid var(--border); margin: 0.75rem 0; padding: 0
 .btn-primary { background: #2563EB; border-color: #1D4ED8; color: white; }
 .btn-outline { background: transparent; }
 
-/* KaTeX baseline tweaks */
-.katex { font-size: 1.05em; }
-.katex-display { overflow-x: auto; }
+/* KaTeX styling */
+.katex { 
+  font-size: 1.1em; 
+  color: inherit;
+}
+.katex-display { 
+  overflow-x: auto; 
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+  margin: 0.75rem 0;
+}
+.katex-display > .katex {
+  display: inline-block;
+  text-align: center;
+  white-space: nowrap;
+}
+/* Ensure KaTeX inherits text color properly */
+.katex .mord, .katex .mbin, .katex .mrel, .katex .mopen, .katex .mclose, .katex .mpunct, .katex .minner {
+  color: inherit;
+}
+/* Math in colored containers */
+.katex-html {
+  color: inherit;
+}
+/* Display math centering */
+.katex-display {
+  text-align: center;
+}
+/* Error styling - less intrusive */
+.katex-error {
+  color: #f87171;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  background: rgba(248, 113, 113, 0.1);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
