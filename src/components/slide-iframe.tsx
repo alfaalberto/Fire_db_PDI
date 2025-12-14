@@ -93,6 +93,96 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           <script defer src="/katex/contrib/auto-render.min.js"></script>
           <script defer src="/katex/contrib/mathtex-script-type.min.js"></script>
           <script>
+            window.MathJax = {
+              tex: {
+                inlineMath: [['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+              },
+              options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+              },
+              startup: {
+                typeset: false,
+                ready: () => {
+                  try {
+                    // @ts-ignore
+                    MathJax.startup.defaultReady();
+                  } catch (_) {}
+
+                  try {
+                    // @ts-ignore
+                    const mj = MathJax;
+                    // @ts-ignore
+                    const tp = mj && mj.typesetPromise;
+                    if (typeof tp === 'function') {
+                      const p = tp.call(mj);
+                      if (p && typeof p.catch === 'function') p.catch(function(){});
+                      return;
+                    }
+                    // @ts-ignore
+                    if (mj && typeof mj.typeset === 'function') {
+                      // @ts-ignore
+                      mj.typeset();
+                      return;
+                    }
+                    // @ts-ignore
+                    if (mj && mj.Hub && typeof mj.Hub.Queue === 'function') {
+                      // Compat: MathJax v2
+                      // @ts-ignore
+                      mj.Hub.Queue(['Typeset', mj.Hub]);
+                    }
+                  } catch (_) {}
+                },
+              },
+            };
+
+            (function(){
+              function ensureMathJaxShims(mj){
+                try {
+                  if (!mj) return;
+                  if (typeof mj.typesetPromise !== 'function') {
+                    mj.typesetPromise = function(){
+                      try {
+                        if (mj.Hub && typeof mj.Hub.Queue === 'function') {
+                          mj.Hub.Queue(['Typeset', mj.Hub]);
+                        }
+                      } catch (_) {}
+                      return Promise.resolve();
+                    };
+                  }
+                  if (typeof mj.typeset !== 'function') {
+                    mj.typeset = function(){
+                      try {
+                        if (typeof mj.typesetPromise === 'function') {
+                          mj.typesetPromise();
+                          return;
+                        }
+                        if (mj.Hub && typeof mj.Hub.Queue === 'function') {
+                          mj.Hub.Queue(['Typeset', mj.Hub]);
+                        }
+                      } catch (_) {}
+                    };
+                  }
+                } catch (_) {}
+              }
+
+              try {
+                var current = window && window.MathJax;
+                ensureMathJaxShims(current);
+
+                var _mj = current;
+                Object.defineProperty(window, 'MathJax', {
+                  configurable: true,
+                  enumerable: true,
+                  get: function(){ return _mj; },
+                  set: function(v){ _mj = v; ensureMathJaxShims(_mj); },
+                });
+              } catch (_) {}
+            })();
+          </script>
+          <script async id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+          <script>
             (function(){
               function inject(src, onload, onerror){
                 var s=document.createElement('script');
@@ -216,53 +306,65 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           </style>
           <script>
               document.addEventListener("DOMContentLoaded", function() {
-                  try {
-                      var autoRender = (typeof renderMathInElement === 'function') ? renderMathInElement : (window && window['renderMathInElement']);
-                      if (typeof autoRender === 'function') {
-                          autoRender(document.body, {
-                              delimiters: [
-                                  {left: '$$', right: '$$', display: true},
-                                  {left: '$', right: '$', display: false},
-                                  {left: '\\(', right: '\\)', display: false},
-                                  {left: '\\[', right: '\\]', display: true}
-                              ],
-                              throwOnError: false,
-                              errorColor: '#f87171',
-                              strict: 'ignore',
-                              trust: true,
-                              macros: {
-                                  '\\R': '\\mathbb{R}',
-                                  '\\N': '\\mathbb{N}',
-                                  '\\Z': '\\mathbb{Z}',
-                                  '\\C': '\\mathbb{C}',
-                                  '\\F': '\\mathcal{F}',
-                                  '\\Laplace': '\\mathcal{L}',
-                                  '\\fourier': '\\mathfrak{F}',
-                                  '\\Re': '\\operatorname{Re}',
-                                  '\\Im': '\\operatorname{Im}'
-                              },
-                              ignoredTags: ['script', 'noscript', 'style', 'textarea', 'option']
-                          });
-                          try {
-                              var mathBlocks = Array.prototype.slice.call(document.querySelectorAll('code, pre'));
-                              mathBlocks.forEach(function(block) {
-                                  if (!block.querySelector('.katex')) return;
-                                  var parent = block.parentElement;
-                                  if (!parent) return;
-                                  while (block.firstChild) {
-                                      parent.insertBefore(block.firstChild, block);
-                                  }
-                                  parent.removeChild(block);
-                              });
-                          } catch (unwrapErr) {
-                              try { console.warn('Failed to unwrap KaTeX from code/pre blocks', unwrapErr); } catch (_) {}
+                  function tryTypesetMathJax(){
+                      try {
+                          var mj = window && window.MathJax;
+                          if (mj && mj.startup && mj.startup.promise && typeof mj.typesetPromise === 'function') {
+                              mj.typesetPromise();
+                              return true;
                           }
-                      } else {
-                          try { console.warn('KaTeX auto-render not available; skipping math rendering'); } catch (e) {}
-                      }
-                  } catch (e) {
-                      try { console.error('KaTeX auto-render invocation failed', e); } catch (_) {}
+                          if (mj && mj.Hub && typeof mj.Hub.Queue === 'function') {
+                              mj.Hub.Queue(['Typeset', mj.Hub]);
+                              return true;
+                          }
+                      } catch (_) {}
+                      return false;
                   }
+
+                  // Wait for MathJax to actually load (async script). Avoid KaTeX/MathJax double-render.
+                  var attempts = 0;
+                  var maxAttempts = 40; // ~10s at 250ms
+                  var timer = setInterval(function(){
+                      attempts++;
+                      if (tryTypesetMathJax()) {
+                          clearInterval(timer);
+                          return;
+                      }
+                      if (attempts >= maxAttempts) {
+                          clearInterval(timer);
+                          // Fallback: KaTeX autorender ONLY if MathJax never became available.
+                          try {
+                              var autoRender = (typeof renderMathInElement === 'function') ? renderMathInElement : (window && window['renderMathInElement']);
+                              if (typeof autoRender === 'function') {
+                                  autoRender(document.body, {
+                                      delimiters: [
+                                          {left: '$$', right: '$$', display: true},
+                                          {left: '\\(', right: '\\)', display: false},
+                                          {left: '\\[', right: '\\]', display: true}
+                                      ],
+                                      throwOnError: false,
+                                      errorColor: '#f87171',
+                                      strict: 'ignore',
+                                      trust: true,
+                                      macros: {
+                                          '\\R': '\\mathbb{R}',
+                                          '\\N': '\\mathbb{N}',
+                                          '\\Z': '\\mathbb{Z}',
+                                          '\\C': '\\mathbb{C}',
+                                          '\\F': '\\mathcal{F}',
+                                          '\\Laplace': '\\mathcal{L}',
+                                          '\\fourier': '\\mathfrak{F}',
+                                          '\\Re': '\\operatorname{Re}',
+                                          '\\Im': '\\operatorname{Im}'
+                                      },
+                                      ignoredTags: ['script', 'noscript', 'style', 'textarea', 'option']
+                                  });
+                              }
+                          } catch (e) {
+                              try { console.error('KaTeX auto-render invocation failed', e); } catch (_) {}
+                          }
+                      }
+                  }, 250);
               });
           </script>
       </head>

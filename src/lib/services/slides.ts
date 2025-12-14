@@ -7,6 +7,51 @@ const cache = new Map<string, { value: SlideDoc[]; expires: number }>();
 const CACHE_KEY = 'allSlides';
 const TTL_MS = 30_000; // 30s
 
+const pendingSaves = new Map<string, string[] | null>();
+const pendingResolvers = new Map<string, Array<{ resolve: () => void; reject: (e: unknown) => void }>>();
+let saveWorker: Promise<void> | null = null;
+
+const FLUSH_DELAY_MS = 1_200;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleFlush(): void {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void runSaveWorker();
+  }, FLUSH_DELAY_MS);
+}
+
+function runSaveWorker(): Promise<void> {
+  if (saveWorker) return saveWorker;
+  saveWorker = (async () => {
+    while (pendingSaves.size > 0) {
+      const next = pendingSaves.entries().next().value as [string, string[] | null] | undefined;
+      if (!next) return;
+      const [id, content] = next;
+      pendingSaves.delete(id);
+      try {
+        await retry(() => saveSlideToDB(id, content));
+        cache.delete(CACHE_KEY);
+        const resolvers = pendingResolvers.get(id);
+        if (resolvers && resolvers.length > 0) {
+          pendingResolvers.delete(id);
+          for (const r of resolvers) r.resolve();
+        }
+      } catch (e) {
+        const resolvers = pendingResolvers.get(id);
+        if (resolvers && resolvers.length > 0) {
+          pendingResolvers.delete(id);
+          for (const r of resolvers) r.reject(e);
+        }
+      }
+    }
+  })().finally(() => {
+    saveWorker = null;
+  });
+  return saveWorker;
+}
+
 async function retry<T>(fn: () => Promise<T>, attempts = 3, baseDelayMs = 300): Promise<T> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -39,9 +84,14 @@ export async function loadAllSlidesCached(): Promise<SlideDoc[]> {
 }
 
 export async function saveSlide(id: string, content: string[] | null): Promise<void> {
-  await retry(() => saveSlideToDB(id, content));
-  // Invalidate cache
-  cache.delete(CACHE_KEY);
+  pendingSaves.set(id, content);
+  const p = new Promise<void>((resolve, reject) => {
+    const current = pendingResolvers.get(id) ?? [];
+    current.push({ resolve, reject });
+    pendingResolvers.set(id, current);
+  });
+  scheduleFlush();
+  return p;
 }
 
 export async function deleteSlide(id: string): Promise<void> {

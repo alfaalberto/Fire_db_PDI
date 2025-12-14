@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GOOGLE_GENAI_API_KEY = process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL_ID || 'gemini-2.0-flash';
+const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-2.0-flash,gemini-1.5-flash-001')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
 const OPENAI_MODEL = process.env.OPENAI_MODEL_ID || 'gpt-4o-mini';
 
 const BASE_PROMPT = `Eres un desarrollador experto en educación web interactiva de nivel licenciatura y posgrado.
@@ -173,47 +177,71 @@ export async function POST(req: NextRequest) {
         }
 
         try {
-          const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
-              GOOGLE_GENAI_API_KEY,
-            )}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: 'user',
-                    parts: [{ text: fullPrompt }],
-                  },
-                ],
-                generationConfig: { temperature: 0.3 },
-              }),
-            },
-          );
+          const requestedModels = [
+            GEMINI_MODEL,
+            ...GEMINI_FALLBACK_MODELS.filter(m => m !== GEMINI_MODEL),
+          ];
 
-          if (!geminiResponse.ok) {
-            const geminiErrorText = await geminiResponse.text();
-            console.error('Gemini fallback error:', geminiResponse.status, geminiErrorText);
-            return NextResponse.json(
+          let lastGeminiErrorText = '';
+          let lastGeminiStatus = 500;
+
+          for (const model of requestedModels) {
+            const geminiResponse = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+                GOOGLE_GENAI_API_KEY,
+              )}`,
               {
-                error: `Sin cuota en OpenAI y error al usar Gemini: ${geminiResponse.status}`,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: 'user',
+                      parts: [{ text: fullPrompt }],
+                    },
+                  ],
+                  generationConfig: { temperature: 0.3 },
+                }),
               },
-              { status: 500 },
             );
+
+            if (geminiResponse.ok) {
+              const geminiData = await geminiResponse.json();
+              const geminiHtml = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+              if (!geminiHtml) {
+                return NextResponse.json(
+                  { error: 'Sin cuota en OpenAI y Gemini no devolvió contenido.' },
+                  { status: 500 },
+                );
+              }
+
+              return NextResponse.json({ improvedHtml: geminiHtml, provider: 'gemini-fallback' });
+            }
+
+            lastGeminiStatus = geminiResponse.status;
+            lastGeminiErrorText = await geminiResponse.text();
+            console.error('Gemini fallback error:', geminiResponse.status, lastGeminiErrorText, { model });
+
+            const isModelNotFoundOrUnsupported =
+              geminiResponse.status === 404 || /not found|not supported for generatecontent/i.test(lastGeminiErrorText);
+
+            if (!isModelNotFoundOrUnsupported) {
+              return NextResponse.json(
+                {
+                  error: `Sin cuota en OpenAI y error al usar Gemini: ${geminiResponse.status} - ${lastGeminiErrorText}`,
+                },
+                { status: 500 },
+              );
+            }
           }
 
-          const geminiData = await geminiResponse.json();
-          const geminiHtml = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-          if (!geminiHtml) {
-            return NextResponse.json(
-              { error: 'Sin cuota en OpenAI y Gemini no devolvió contenido.' },
-              { status: 500 },
-            );
-          }
-
-          return NextResponse.json({ improvedHtml: geminiHtml, provider: 'gemini-fallback' });
+          return NextResponse.json(
+            {
+              error: `Sin cuota en OpenAI y error al usar Gemini: ${lastGeminiStatus} - ${lastGeminiErrorText}`,
+            },
+            { status: 500 },
+          );
         } catch (e) {
           console.error('Gemini fallback exception:', e);
           return NextResponse.json(

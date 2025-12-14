@@ -4,7 +4,11 @@ import { withSentryConfig } from '@sentry/nextjs';
 const isGithubPages = process.env.GITHUB_PAGES === 'true';
 const repo = process.env.REPO_NAME || '';
 
+const distDir = process.env.NEXT_DIST_DIR || '.next';
+
 const nextConfig: NextConfig = {
+
+  distDir,
 
   output: isGithubPages ? 'export' : undefined,
   images: {

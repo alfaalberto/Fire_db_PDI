@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+};
+
 const GOOGLE_GENAI_API_KEY = process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL_ID || 'gemini-2.0-flash';
+const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-2.0-flash,gemini-1.5-flash-001')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
 
 export async function POST(req: NextRequest) {
   try {
@@ -125,43 +139,71 @@ ${userInstructions && typeof userInstructions === 'string' && userInstructions.t
         : ''}
     `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
-        GOOGLE_GENAI_API_KEY,
-      )}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: basePrompt.replace('{{HTML_INPUT}}', htmlContent),
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.3,
-          },
-        }),
-      },
-    );
+    const requestedModels = [
+      GEMINI_MODEL,
+      ...GEMINI_FALLBACK_MODELS.filter(m => m !== GEMINI_MODEL),
+    ];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini API error:', response.status, errorText);
+    let lastErrorText = '';
+    let lastStatus = 500;
+    let data: GeminiGenerateContentResponse | null = null;
+
+    for (const model of requestedModels) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+          GOOGLE_GENAI_API_KEY,
+        )}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: basePrompt.replace('{{HTML_INPUT}}', htmlContent),
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.3,
+            },
+          }),
+        },
+      );
+
+      if (response.ok) {
+        data = (await response.json()) as GeminiGenerateContentResponse;
+        break;
+      }
+
+      lastStatus = response.status;
+      lastErrorText = await response.text();
+      console.error('Gemini API error:', response.status, lastErrorText, { model });
+
+      const isModelNotFoundOrUnsupported =
+        response.status === 404 ||
+        /not found|not supported for generatecontent/i.test(lastErrorText);
+
+      if (!isModelNotFoundOrUnsupported) {
+        return NextResponse.json(
+          { error: `Gemini API error: ${response.status} - ${lastErrorText}` },
+          { status: 500 },
+        );
+      }
+    }
+
+    if (!data) {
       return NextResponse.json(
-        { error: `Gemini API error: ${response.status} - ${errorText}` },
+        { error: `Gemini API error: ${lastStatus} - ${lastErrorText}` },
         { status: 500 },
       );
     }
 
-    const data = await response.json();
     const improvedHtml = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (!improvedHtml) {

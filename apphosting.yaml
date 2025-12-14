@@ -20,6 +20,11 @@ env:
     availability:
       - RUNTIME
 
+  - variable: OPENAI_MODEL_ID
+    value: "gpt-5.2"
+    availability:
+      - RUNTIME
+
   # Clave de Gemini usada por Genkit (servidor)
   # - variable: GOOGLE_GENAI_API_KEY
   #   secret: GOOGLE_GENAI_API_KEY

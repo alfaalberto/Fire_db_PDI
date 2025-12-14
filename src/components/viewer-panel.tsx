@@ -142,6 +142,24 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   const currentSlideContent = hasContent ? (slide.content?.[subSlideIndex] || '') : '';
   const totalSubSlides = hasContent ? slide.content!.length : 0;
 
+  const handlePrev = useCallback(() => {
+    if (!hasContent) return;
+    if (isPresentationMode && subSlideIndex > 0) {
+      setSubSlideIndex(i => Math.max(0, i - 1));
+      return;
+    }
+    onNavigate(prevSlideId);
+  }, [hasContent, isPresentationMode, subSlideIndex, onNavigate, prevSlideId]);
+
+  const handleNext = useCallback(() => {
+    if (!hasContent) return;
+    if (isPresentationMode && subSlideIndex < totalSubSlides - 1) {
+      setSubSlideIndex(i => Math.min(totalSubSlides - 1, i + 1));
+      return;
+    }
+    onNavigate(nextSlideId);
+  }, [hasContent, isPresentationMode, subSlideIndex, totalSubSlides, onNavigate, nextSlideId]);
+
   const deleteTitle = deleteConfirmStep === 1
     ? '¿Estás seguro?'
     : deleteConfirmStep === 2
@@ -166,19 +184,13 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
 
         let handled = false;
         if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-            if (isPresentationMode && subSlideIndex < totalSubSlides - 1) {
-                setSubSlideIndex(i => i + 1);
-                handled = true;
-            } else if (isPresentationMode) {
-                onNavigate(nextSlideId);
+            if (isPresentationMode) {
+                handleNext();
                 handled = true;
             }
         } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-            if (isPresentationMode && subSlideIndex > 0) {
-                setSubSlideIndex(i => i - 1);
-                handled = true;
-            } else if (isPresentationMode) {
-                onNavigate(prevSlideId);
+            if (isPresentationMode) {
+                handlePrev();
                 handled = true;
             }
         }
@@ -188,7 +200,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPresentationMode, hasContent, subSlideIndex, totalSubSlides, onNavigate, prevSlideId, nextSlideId]);
+  }, [isPresentationMode, hasContent, handleNext, handlePrev]);
 
   const handleSave = useCallback(() => {
     if (!slide) return;
@@ -561,10 +573,22 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
 
       {(!isEditing || isPresentationMode) && hasContent && (
         <>
-          <Button variant="outline" size="icon" className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={() => onNavigate(prevSlideId)} disabled={!prevSlideId}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full z-10"
+            onClick={handlePrev}
+            disabled={isPresentationMode ? !(subSlideIndex > 0 || !!prevSlideId) : !prevSlideId}
+          >
             <ChevronLeft />
           </Button>
-          <Button variant="outline" size="icon" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={() => onNavigate(nextSlideId)} disabled={!nextSlideId}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full z-10"
+            onClick={handleNext}
+            disabled={isPresentationMode ? !(subSlideIndex < totalSubSlides - 1 || !!nextSlideId) : !nextSlideId}
+          >
             <ChevronRight />
           </Button>
         </>

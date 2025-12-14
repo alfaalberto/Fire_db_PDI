@@ -58,14 +58,40 @@ function saveIndexStructureToStorage(index: IndexItem[]): void {
   }
 }
 
-function mapContentToIndex(items: IndexItem[], contentMap: Map<string, string[] | null>): IndexItem[] {
+function mapContentToIndex(
+  items: IndexItem[],
+  contentMap: Map<string, string[] | null>,
+  usedContentIds: Set<string>,
+  parentId: string | null = null,
+): IndexItem[] {
   return items.map(item => {
     const newItem = { ...item };
-    if (contentMap.has(item.id)) {
-      newItem.content = contentMap.get(item.id);
+
+    const exact = contentMap.has(item.id) ? (contentMap.get(item.id) ?? null) : null;
+    const exactHasContent = Array.isArray(exact) && exact.length > 0;
+
+    let legacyId: string | null = null;
+    let legacy: string[] | null = null;
+    let legacyHasContent = false;
+    if (parentId && item.id.startsWith(`${parentId}-`)) {
+      legacyId = item.id.slice(parentId.length + 1);
+      if (contentMap.has(legacyId)) {
+        legacy = contentMap.get(legacyId) ?? null;
+        legacyHasContent = Array.isArray(legacy) && legacy.length > 0;
+      }
     }
+
+    if (exactHasContent) {
+      newItem.content = exact;
+    } else if (legacyHasContent && legacyId) {
+      newItem.content = legacy;
+      usedContentIds.add(legacyId);
+    } else if (contentMap.has(item.id)) {
+      newItem.content = exact;
+    }
+
     if (item.children) {
-      newItem.children = mapContentToIndex(item.children, contentMap);
+      newItem.children = mapContentToIndex(item.children, contentMap, usedContentIds, item.id);
     }
     return newItem;
   });
@@ -142,11 +168,32 @@ export default function AppShell() {
         const allSlides = await loadAllSlidesCached();
         const contentMap = new Map<string, string[] | null>();
         allSlides.forEach(slide => contentMap.set(slide.id, slide.content));
-        let restoredIndex = mapContentToIndex(storedIndexStructure, contentMap);
-        const allIndexIds = new Set(flattenIndex(restoredIndex).map(i => i.id));
+
+        const debugIds = [
+          'filtrado-frecuencia-the-basics-of-filtering-in-the-frequency-domain',
+          'the-basics-of-filtering-in-the-frequency-domain',
+        ];
+        for (const id of debugIds) {
+          if (!contentMap.has(id)) {
+            console.log('[AppShell][Debug] Slide no existe en Firestore:', id);
+            continue;
+          }
+          const c = contentMap.get(id);
+          const n = Array.isArray(c) ? c.length : 0;
+          console.log('[AppShell][Debug] Slide en Firestore:', { id, hasContent: Array.isArray(c) && c.length > 0, count: n });
+        }
+
+        const usedContentIds = new Set<string>();
+        let restoredIndex = mapContentToIndex(storedIndexStructure, contentMap, usedContentIds);
+
+        const allIndexIds = new Set([
+          ...flattenIndex(restoredIndex).map(i => i.id),
+          ...usedContentIds,
+        ]);
         const orphanSlides = allSlides.filter(s => !allIndexIds.has(s.id));
         if (orphanSlides.length > 0) {
           console.log(`[AppShell] Encontradas ${orphanSlides.length} diapositivas huérfanas en BD.`);
+          console.log('[AppShell] IDs huérfanos:', orphanSlides.map(s => s.id));
           const recoveredFolder: IndexItem = {
               id: `recovered-folder-${Date.now()}`,
               title: '📂 ARCHIVOS RECUPERADOS DE BD',
@@ -194,7 +241,7 @@ export default function AppShell() {
   }, []);
 
   const handleSave = useCallback(
-    async (id: string, content: string[] | null) => {
+    (id: string, content: string[] | null) => {
       const applyLocalUpdate = () => {
         setIndex(prev =>
           produce(prev, (draft: IndexItem[]) => {
@@ -204,19 +251,17 @@ export default function AppShell() {
         );
       };
 
+      applyLocalUpdate();
+
       if (firestoreWriteDisabled) {
         console.warn(
           'Skipping remote save for slide because Firestore writes are temporarily disabled after resource-exhausted.',
           { id },
         );
-        applyLocalUpdate();
         return;
       }
 
-      try {
-        await saveSlide(id, content);
-        applyLocalUpdate();
-      } catch (error) {
+      void saveSlide(id, content).catch((error) => {
         console.error("Failed to save slide:", error);
         const code = (error as { code?: string }).code;
         if (code === "resource-exhausted") {
@@ -224,9 +269,8 @@ export default function AppShell() {
             "Disabling further Firestore writes for this session after resource-exhausted error.",
           );
           setFirestoreWriteDisabled(true);
-          applyLocalUpdate();
         }
-      }
+      });
     },
     [firestoreWriteDisabled],
   );

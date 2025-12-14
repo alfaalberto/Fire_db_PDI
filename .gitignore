@@ -3,3 +3,6 @@ node_modules
 .firebase/pdi-v2/functions/node_modules
 .firebase/pdi-v2/functions/.next
 .env.local
+.env
+.next-dev/
+.next-prod/
