@@ -6,3 +6,7 @@ node_modules
 .env
 .next-dev/
 .next-prod/
+tsconfig.tsbuildinfo
+debug.log
+debug-api.js
+list-models.js
