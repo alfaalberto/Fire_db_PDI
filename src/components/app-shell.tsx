@@ -381,9 +381,11 @@ export default function AppShell() {
                         />
                     </Sidebar>
                 </div>
-                <main className="flex-1 flex flex-col">
+                <main className="flex-1 flex flex-col min-h-0">
                     <ViewerPanel
                         slide={selectedSlide}
+                        index={index}
+                        canPresent={true}
                         onSave={handleSave}
                         onRelocate={openRelocateModal}
                         isPresentationMode={isPresentationMode}

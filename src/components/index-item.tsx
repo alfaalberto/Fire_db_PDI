@@ -18,7 +18,7 @@ interface IndexItemProps {
 export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: IndexItemProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = activeSlideId === item.id;
-  const isParentOfActive = activeSlideId ? activeSlideId.startsWith(`${item.id}.`) || activeSlideId.startsWith(`${item.id}p`) : false;
+  const isParentOfActive = !!activeSlideId && !!hasChildren ? containsId(item.children!, activeSlideId) : false;
   
   const [isOpen, setIsOpen] = useState(isParentOfActive);
 
@@ -99,4 +99,14 @@ export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: Inde
       )}
     </Collapsible>
   );
+}
+
+function containsId(items: IndexItemType[], id: string): boolean {
+  for (const item of items) {
+    if (item.id === id) return true;
+    if (item.children && item.children.length > 0) {
+      if (containsId(item.children, id)) return true;
+    }
+  }
+  return false;
 }

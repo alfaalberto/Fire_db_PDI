@@ -1,12 +1,8 @@
 import type { Metadata } from 'next';
-import { Inter, Source_Code_Pro } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { SwRegister } from "@/components/sw-register";
 import { ThemeProvider } from "@/components/theme-provider";
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const sourceCodePro = Source_Code_Pro({ subsets: ['latin'], variable: '--font-code' });
 
 export const metadata: Metadata = {
   title: 'Procesamiento Digital de Imágenes',
@@ -34,7 +30,7 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className={`${inter.variable} ${sourceCodePro.variable} font-body antialiased bg-background`}>
+      <body className="font-body antialiased bg-background">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

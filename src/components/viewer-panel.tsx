@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useTransition, useCallback } from 'react';
-import { Upload, FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move, Bold, Italic, List, Image as ImageIcon, Code, Type, Columns } from 'lucide-react';
+import React, { useState, useEffect, useRef, useTransition, useCallback, useMemo } from 'react';
+import { FileText, Maximize, Minimize, Sparkles, Edit, ChevronLeft, ChevronRight, PlusCircle, Move, Bold, Italic, List, Image as ImageIcon, Code, Type, Columns } from 'lucide-react';
 import type { IndexItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { SlideIframe } from './slide-iframe';
 // Note: avoid importing Genkit server flow directly in client to keep prod build lean.
-import { Card, CardContent } from './ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +31,8 @@ import { cn } from '@/lib/utils';
 
 interface ViewerPanelProps {
   slide: IndexItem | null;
+  index: IndexItem[];
+  canPresent: boolean;
   onSave: (id: string, content: string[] | null) => void;
   onRelocate: (slideId: string) => void;
   isPresentationMode: boolean;
@@ -40,10 +42,11 @@ interface ViewerPanelProps {
   breadcrumbs: IndexItem[];
 }
 
-export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onNavigate, prevSlideId, nextSlideId, breadcrumbs }: ViewerPanelProps) {
+export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPresentationMode, onNavigate, prevSlideId, nextSlideId, breadcrumbs }: ViewerPanelProps) {
   const [subSlideIndex, setSubSlideIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [isSplitView, setIsSplitView] = useState(false);
+  const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmStep, setDeleteConfirmStep] = useState(1);
   const [htmlContent, setHtmlContent] = useState('');
@@ -76,12 +79,17 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     }
     // Initialize displayed content when not editing
     if (!isEditing) {
-      const initial = slide?.content && slide.content.length > 0 ? (slide.content[0] || '') : '';
-      try { console.log('[VIEWER] set initial htmlContent', { subSlideIndex: 0, hasContent: !!slide?.content?.length }); } catch {}
+      const initial =
+        slide?.content && slide.content.length > 0
+          ? (slide.content[0] || '')
+          : slide
+            ? buildSectionHtml(slide, breadcrumbs)
+            : buildTocHtml(index);
+      try { console.log('[VIEWER] set initial htmlContent', { subSlideIndex: 0, hasStoredContent: !!slide?.content?.length }); } catch {}
       setHtmlContent(initial);
     }
     prevSlideIdRef.current = currentId;
-  }, [slide?.id, isEditing, slide]);
+  }, [slide?.id, isEditing, slide, breadcrumbs, index]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -110,13 +118,16 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     // When slide content or sub-slide index changes, update the displayed content
     // but do not force exit from edit mode
     if (!isEditing) {
-      const current = slide?.content && slide.content.length > 0
-        ? (slide.content[subSlideIndex] || '')
-        : '';
+      const current =
+        slide?.content && slide.content.length > 0
+          ? (slide.content[subSlideIndex] || '')
+          : slide
+            ? buildSectionHtml(slide, breadcrumbs)
+            : buildTocHtml(index);
       try { console.log('[VIEWER] update htmlContent on deps change', { subSlideIndex, isEditing }); } catch {}
       setHtmlContent(current);
     }
-  }, [slide, subSlideIndex, isEditing]);
+  }, [slide, subSlideIndex, isEditing, breadcrumbs, index]);
 
   useEffect(() => {
     if (!isEditing || !slide) return;
@@ -138,9 +149,38 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
     };
   }, [htmlContent, isEditing, slide, subSlideIndex, onSave]);
 
-  const hasContent = slide?.content && slide.content.length > 0;
-  const currentSlideContent = hasContent ? (slide.content?.[subSlideIndex] || '') : '';
-  const totalSubSlides = hasContent ? slide.content!.length : 0;
+  const hasContent = !!slide;
+  const hasStoredContent = !!slide?.content && slide.content.length > 0;
+  const totalSubSlides = hasStoredContent ? slide!.content!.length : 1;
+  const effectiveSubSlideIndex = hasStoredContent ? Math.min(subSlideIndex, totalSubSlides - 1) : 0;
+  const currentSlideContent = hasStoredContent ? (slide!.content?.[effectiveSubSlideIndex] || '') : '';
+  const generatedSlideHtml = useMemo(() => {
+    if (!slide) {
+      return buildTocHtml(index);
+    }
+    return buildSectionHtml(slide, breadcrumbs);
+  }, [slide, index, breadcrumbs]);
+  const displayedSlideHtml = hasStoredContent ? currentSlideContent : generatedSlideHtml;
+
+  useEffect(() => {
+    if (!carouselApi || !hasStoredContent) return;
+    carouselApi.scrollTo(effectiveSubSlideIndex);
+  }, [carouselApi, effectiveSubSlideIndex, hasStoredContent]);
+
+  useEffect(() => {
+    if (!carouselApi) return;
+    const onSelect = () => {
+      const idx = carouselApi.selectedScrollSnap();
+      setSubSlideIndex((prev) => (prev === idx ? prev : idx));
+    };
+    onSelect();
+    carouselApi.on("select", onSelect);
+    carouselApi.on("reInit", onSelect);
+    return () => {
+      carouselApi.off("select", onSelect);
+      carouselApi.off("reInit", onSelect);
+    };
+  }, [carouselApi]);
 
   const handlePrev = useCallback(() => {
     if (!hasContent) return;
@@ -174,9 +214,32 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
 
   const deleteActionLabel = deleteConfirmStep < 3 ? 'Continuar' : 'Eliminar definitivamente';
 
+  const handleOverlayPrev = useCallback(() => {
+    if (hasStoredContent && subSlideIndex > 0) {
+      setSubSlideIndex((i) => i - 1);
+      return;
+    }
+    onNavigate(prevSlideId);
+  }, [hasStoredContent, subSlideIndex, onNavigate, prevSlideId]);
+
+  const handleOverlayNext = useCallback(() => {
+    if (hasStoredContent && subSlideIndex < totalSubSlides - 1) {
+      setSubSlideIndex((i) => i + 1);
+      return;
+    }
+    onNavigate(nextSlideId);
+  }, [hasStoredContent, subSlideIndex, totalSubSlides, onNavigate, nextSlideId]);
+
+  const overlayPrevDisabled = hasStoredContent
+    ? (subSlideIndex === 0 && !prevSlideId)
+    : !prevSlideId;
+  const overlayNextDisabled = hasStoredContent
+    ? (subSlideIndex >= totalSubSlides - 1 && !nextSlideId)
+    : !nextSlideId;
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-        if (!hasContent) return;
+        if (!isPresentationMode) return;
         if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
         const activeEl = document.activeElement;
         if (activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName)) return;
@@ -184,14 +247,14 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
 
         let handled = false;
         if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-            if (isPresentationMode) {
-                handleNext();
-                handled = true;
+            if (!overlayNextDisabled) {
+              handleOverlayNext();
+              handled = true;
             }
         } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-            if (isPresentationMode) {
-                handlePrev();
-                handled = true;
+            if (!overlayPrevDisabled) {
+              handleOverlayPrev();
+              handled = true;
             }
         }
 
@@ -200,7 +263,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPresentationMode, hasContent, handleNext, handlePrev]);
+  }, [isPresentationMode, overlayNextDisabled, overlayPrevDisabled, handleOverlayNext, handleOverlayPrev]);
 
   const handleSave = useCallback(() => {
     if (!slide) return;
@@ -227,7 +290,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   }, [slide, onSave, toast]);
 
   const handleDeleteCurrentSubSlide = useCallback(() => {
-      if (!slide || !hasContent) return;
+      if (!slide || !hasStoredContent) return;
       if (totalSubSlides <= 1) {
         const newContentArray: string[] = [];
         onSave(slide.id, newContentArray);
@@ -243,7 +306,7 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
       setIsEditing(false);
       onSave(slide.id, newContentArray);
       toast({ title: "Diapositiva eliminada." });
-  }, [slide, hasContent, totalSubSlides, subSlideIndex, onSave, toast]);
+  }, [slide, hasStoredContent, totalSubSlides, subSlideIndex, onSave, toast]);
 
   const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
       setDeleteDialogOpen(open);
@@ -391,13 +454,49 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
   };
 
   if (!slide) {
+    const canNavigate = !!prevSlideId || !!nextSlideId;
     return (
-      <div className="flex-1 bg-background flex items-center justify-center p-8">
-        <div className="text-center">
-          <FileText size={64} className="mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-2xl font-bold text-foreground">Bienvenido al Visor de Presentaciones</h2>
-          <p className="mt-2 text-muted-foreground">Selecciona un tema del índice de la izquierda para comenzar.</p>
-        </div>
+      <div className="flex-1 bg-background flex flex-col h-full relative">
+        {!isPresentationMode && (
+          <header className="bg-card p-2 flex items-center justify-between text-foreground border-b border-border shrink-0">
+            <div className="flex flex-col min-w-0 px-2 overflow-hidden">
+              <div className="text-xs text-muted-foreground truncate">Índice</div>
+              <div className="text-sm font-medium truncate">Selecciona un tema para comenzar</div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!canPresent} title="Modo presentación">
+                <Maximize size={18} />
+              </Button>
+            </div>
+          </header>
+        )}
+
+        <main className="flex-1 overflow-hidden">
+          <SlideIframe ref={iframeRef} content={displayedSlideHtml} title="Índice" presentationMode={isPresentationMode} />
+        </main>
+
+        {isPresentationMode && (
+          <Button
+            onClick={togglePresentationMode}
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 right-4 z-20 bg-background/50 hover:bg-background/80 rounded-full"
+            title="Salir del modo presentación"
+          >
+            <Minimize size={24} />
+          </Button>
+        )}
+
+        {(!isEditing || isPresentationMode) && canPresent && canNavigate && (
+          <>
+            <Button variant="outline" size="icon" className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={handleOverlayPrev} disabled={overlayPrevDisabled}>
+              <ChevronLeft />
+            </Button>
+            <Button variant="outline" size="icon" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={handleOverlayNext} disabled={overlayNextDisabled}>
+              <ChevronRight />
+            </Button>
+          </>
+        )}
       </div>
     );
   }
@@ -429,16 +528,16 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
                   <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>Subir archivo (.html)</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              {hasContent && !isEditing && <Button onClick={() => setIsEditing(true)} size="sm"><Edit /> Editar</Button>}
-              {hasContent && <Button onClick={() => onRelocate(slide.id)} variant="outline" size="sm"><Move /> Reubicar</Button>}
-              <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!hasContent} title="Modo presentación">
+              {!isEditing && <Button onClick={() => setIsEditing(true)} size="sm"><Edit /> Editar</Button>}
+              <Button onClick={() => onRelocate(slide.id)} variant="outline" size="sm"><Move /> Reubicar</Button>
+              <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!canPresent} title="Modo presentación">
                 <Maximize size={18} />
               </Button>
             </div>
           </header>
       )}
 
-      <main className="flex-1 overflow-y-auto">
+      <main className={cn("flex-1 min-h-0", isEditing ? "overflow-y-auto" : "overflow-hidden")}>
         {isEditing ? (
           <div className="flex flex-col h-full overflow-hidden">
              <div className="p-2 bg-muted border-b border-border flex flex-wrap gap-2 shrink-0">
@@ -512,29 +611,61 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
                 )}
             </div>
           </div>
-        ) : hasContent ? (
-          <SlideIframe ref={iframeRef} content={currentSlideContent} title={slide.title} />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
-            <Card className="max-w-lg w-full">
-              <CardContent className="pt-6 text-center">
-                  <Upload size={48} className="mb-4 text-muted-foreground mx-auto" />
-                  <h3 className="text-xl font-semibold text-foreground">Sin contenido</h3>
-                  <p className="mt-2 mb-6">Puedes pegar código HTML o subir un archivo.</p>
-                  <div className="flex gap-4 justify-center">
-                    <Button onClick={() => setIsEditing(true)} size="lg">Pegar Código</Button>
-                    <Button onClick={() => fileInputRef.current?.click()} variant="secondary" size="lg">Subir Archivo</Button>
-                  </div>
-              </CardContent>
-            </Card>
-          </div>
+          hasStoredContent ? (
+            <Carousel
+              key={slide.id}
+              setApi={(api) => setCarouselApi(api)}
+              opts={{ loop: false }}
+              className="h-full"
+            >
+              <CarouselContent className="h-full">
+                {slide.content!.map((content, i) => (
+                  <CarouselItem key={`${slide.id}-${i}`} className="h-full">
+                    <div className="h-full">
+                      {Math.abs(i - effectiveSubSlideIndex) <= 1 ? (
+                        <SlideIframe
+                          ref={i === effectiveSubSlideIndex ? iframeRef : undefined}
+                          content={content || ''}
+                          title={`${slide.title} (${i + 1}/${totalSubSlides})`}
+                          presentationMode={isPresentationMode}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          Diapositiva {i + 1}
+                        </div>
+                      )}
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
+          ) : (
+            <SlideIframe ref={iframeRef} content={displayedSlideHtml} title={slide.title} presentationMode={isPresentationMode} />
+          )
         )}
       </main>
 
-      {!isEditing && !isPresentationMode && hasContent && totalSubSlides > 0 && (
+      {!isEditing && !isPresentationMode && hasStoredContent && totalSubSlides > 0 && (
         <footer className="bg-card p-2 flex items-center justify-center gap-4 text-foreground border-t">
           <Button onClick={() => setSubSlideIndex(i => i - 1)} disabled={subSlideIndex === 0} variant="outline" size="sm">Anterior</Button>
-          <span>{subSlideIndex + 1} / {totalSubSlides}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{subSlideIndex + 1} / {totalSubSlides}</span>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalSubSlides }).map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Ir a la diapositiva ${i + 1}`}
+                  onClick={() => setSubSlideIndex(i)}
+                  className={cn(
+                    "h-2 w-2 rounded-full transition-colors",
+                    i === subSlideIndex ? "bg-primary" : "bg-muted-foreground/40 hover:bg-muted-foreground/70"
+                  )}
+                />
+              ))}
+            </div>
+          </div>
           <Button onClick={() => setSubSlideIndex(i => i + 1)} disabled={subSlideIndex >= totalSubSlides - 1} size="sm">Siguiente</Button>
           
           <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
@@ -571,28 +702,76 @@ export function ViewerPanel({ slide, onSave, onRelocate, isPresentationMode, onN
         </Button>
       )}
 
-      {(!isEditing || isPresentationMode) && hasContent && (
+      {(!isEditing || isPresentationMode) && canPresent && ((hasStoredContent && totalSubSlides > 1) || prevSlideId || nextSlideId) && (
         <>
-          <Button
-            variant="outline"
-            size="icon"
-            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full z-10"
-            onClick={handlePrev}
-            disabled={isPresentationMode ? !(subSlideIndex > 0 || !!prevSlideId) : !prevSlideId}
-          >
+          <Button variant="outline" size="icon" className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={handleOverlayPrev} disabled={overlayPrevDisabled}>
             <ChevronLeft />
           </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full z-10"
-            onClick={handleNext}
-            disabled={isPresentationMode ? !(subSlideIndex < totalSubSlides - 1 || !!nextSlideId) : !nextSlideId}
-          >
+          <Button variant="outline" size="icon" className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full z-10" onClick={handleOverlayNext} disabled={overlayNextDisabled}>
             <ChevronRight />
           </Button>
         </>
       )}
     </div>
   );
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderIndexList(items: IndexItem[], depth: number, maxDepth: number): string {
+  if (items.length === 0) return '';
+  const listItems = items
+    .map((item) => {
+      const childrenHtml =
+        item.children && item.children.length > 0 && depth < maxDepth
+          ? renderIndexList(item.children, depth + 1, maxDepth)
+          : '';
+      return `<li><span>${escapeHtml(item.title)}</span>${childrenHtml}</li>`;
+    })
+    .join('');
+  return `<ul>${listItems}</ul>`;
+}
+
+function buildTocHtml(index: IndexItem[]): string {
+  const listHtml = renderIndexList(index, 0, 2);
+  return `
+    <main class="container">
+      <h1>Temario</h1>
+      <p class="muted">Navega con las flechas del teclado en modo presentación, o selecciona un tema en el índice lateral.</p>
+      <hr />
+      ${listHtml || '<p class="muted">No hay temas cargados.</p>'}
+    </main>
+  `;
+}
+
+function buildSectionHtml(slide: IndexItem, breadcrumbs: IndexItem[]): string {
+  const crumbs = breadcrumbs.length > 0
+    ? `<p class="muted">${breadcrumbs.map((b) => escapeHtml(b.title)).join(' / ')}</p>`
+    : '';
+  const hasChildren = !!slide.children && slide.children.length > 0;
+  const childrenHtml = hasChildren
+    ? `
+      <hr />
+      <h2>Secciones</h2>
+      ${renderIndexList(slide.children!, 0, 2)}
+    `
+    : '';
+  const emptyHint = !hasChildren
+    ? `<p class="muted">Sin contenido HTML para este tema. Usa \"Editar\" para crear diapositivas o importa un archivo .html.</p>`
+    : `<p class="muted">Este tema contiene subsecciones. Usa el índice lateral para elegir una, o navega con flechas en modo presentación.</p>`;
+  return `
+    <main class="container">
+      ${crumbs}
+      <h1>${escapeHtml(slide.title)}</h1>
+      ${emptyHint}
+      ${childrenHtml}
+    </main>
+  `;
 }

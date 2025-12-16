@@ -3,10 +3,19 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) =>
+        Promise.all(keys.map((k) => {
+          if (!CACHE_ALLOWLIST.includes(k)) return caches.delete(k);
+        })),
+      ),
+    ]),
+  );
 });
 
-const CACHE_NAME = 'pdi-cache-v1';
+const CACHE_NAME = 'pdi-cache-v2';
 const CACHE_ALLOWLIST = [CACHE_NAME];
 
 self.addEventListener('fetch', (event) => {
@@ -20,13 +29,17 @@ self.addEventListener('fetch', (event) => {
   // Do not cache API routes
   if (url.pathname.startsWith('/api/')) return;
 
+  if (url.pathname.startsWith('/_next/')) return;
+
   // Network-first for HTML
   if (req.headers.get('accept')?.includes('text/html')) {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+          if (res && res.ok) {
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+          }
           return res;
         })
         .catch(() => caches.match(req))
@@ -40,8 +53,10 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached;
       return fetch(req)
         .then((res) => {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+          if (res && res.ok && res.type === 'basic') {
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+          }
           return res;
         })
         .catch(() => cached);
