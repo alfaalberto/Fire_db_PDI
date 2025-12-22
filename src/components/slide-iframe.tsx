@@ -39,14 +39,20 @@ interface SlideIframeProps {
   content: string;
   title: string;
   presentationMode?: boolean;
+  forceFit?: boolean;
 }
 
-export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ content, title, presentationMode = false }, ref) => {
+export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ content, title, presentationMode = false, forceFit = false }, ref) => {
   const trustSlides = process.env.NEXT_PUBLIC_TRUST_SLIDES !== 'false';
+  const enableMathJax = process.env.NEXT_PUBLIC_ENABLE_MATHJAX === 'true';
   const { headHtml, bodyHtml } = useMemo(() => {
     let html = trustSlides ? content : sanitizeHtml(content);
     html = html.replace(/<script\b[^>]*src=["'][^"']*polyfill\.io[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
     html = html.replace(/<!doctype[^>]*>/gi, '');
+    if (!enableMathJax) {
+      html = html.replace(/<script\b[^>]*src=["'][^"']*(mathjax|tex-mml-chtml)\.[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+      html = html.replace(/<script\b[^>]*>\s*(?:window\.)?MathJax\s*=\s*[\s\S]*?<\/script>/gi, '');
+    }
     html = stripBBoxWrappers(html);
 
     let extractedHead = '';
@@ -75,7 +81,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
     }
 
     return { headHtml: extractedHead, bodyHtml: extractedBody };
-  }, [content, trustSlides]);
+  }, [content, trustSlides, enableMathJax]);
 
   const baseHref = typeof window !== 'undefined' ? `${window.location.origin}/` : '/';
   const appStylesheetsHtml = useMemo(() => {
@@ -97,6 +103,28 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
               width: 100%;
               height: 100%;
               overflow: hidden;
+              background-color: #111827;
+              color: #E5E7EB;
+            }
+
+            #__slide_viewport {
+              width: 100%;
+              height: 100%;
+              overflow: hidden;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+              padding: 16px;
+            }
+
+            #__slide_frame {
+              display: inline-block;
+              overflow: hidden;
+            }
+
+            #__slide_scale {
+              display: inline-block;
+              transform-origin: top center;
             }
           </style>
       `
@@ -106,17 +134,38 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
             *, *::before, *::after {
               box-sizing: border-box;
             }
-            html {
-              overflow: auto;
-            }
-            body { 
+            html, body {
               margin: 0;
-              padding: 1.5rem;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              overflow: hidden;
               background-color: #111827; 
               color: #E5E7EB;
               font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
               line-height: 1.6;
             }
+
+            #__slide_viewport {
+              width: 100%;
+              height: 100%;
+              overflow: auto;
+              padding: 1.5rem;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+            }
+
+            #__slide_frame {
+              display: inline-block;
+              overflow: hidden;
+            }
+
+            #__slide_scale {
+              display: inline-block;
+              transform-origin: top center;
+            }
+
             * {
               max-width: 100%;
             }
@@ -161,7 +210,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
   `;
   const fullHtml = String.raw`
       <!DOCTYPE html>
-      <html lang="es">
+      <html lang="es" data-force-fit="${forceFit ? 'true' : 'false'}" data-enable-mathjax="${enableMathJax ? 'true' : 'false'}">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -173,6 +222,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           <script defer src="/katex/katex.min.js"></script>
           <script defer src="/katex/contrib/auto-render.min.js"></script>
           <script defer src="/katex/contrib/mathtex-script-type.min.js"></script>
+          ${enableMathJax ? String.raw`
           <script>
             window.MathJax = {
               tex: {
@@ -185,121 +235,11 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
               },
               startup: {
                 typeset: false,
-                ready: () => {
-                  try {
-                    // @ts-ignore
-                    MathJax.startup.defaultReady();
-                  } catch (_) {}
-
-                  try {
-                    // @ts-ignore
-                    const mj = MathJax;
-                    // @ts-ignore
-                    const tp = mj && mj.typesetPromise;
-                    if (typeof tp === 'function') {
-                      const p = tp.call(mj);
-                      if (p && typeof p.catch === 'function') p.catch(function(){});
-                      return;
-                    }
-                    // @ts-ignore
-                    if (mj && typeof mj.typeset === 'function') {
-                      // @ts-ignore
-                      mj.typeset();
-                      return;
-                    }
-                    // @ts-ignore
-                    if (mj && mj.Hub && typeof mj.Hub.Queue === 'function') {
-                      // Compat: MathJax v2
-                      // @ts-ignore
-                      mj.Hub.Queue(['Typeset', mj.Hub]);
-                    }
-                  } catch (_) {}
-                },
               },
             };
-
-            (function(){
-              function ensureMathJaxShims(mj){
-                try {
-                  if (!mj) return;
-                  if (typeof mj.typesetPromise !== 'function') {
-                    mj.typesetPromise = function(){
-                      try {
-                        if (mj.Hub && typeof mj.Hub.Queue === 'function') {
-                          mj.Hub.Queue(['Typeset', mj.Hub]);
-                        }
-                      } catch (_) {}
-                      return Promise.resolve();
-                    };
-                  }
-                  if (typeof mj.typeset !== 'function') {
-                    mj.typeset = function(){
-                      try {
-                        if (typeof mj.typesetPromise === 'function') {
-                          mj.typesetPromise();
-                          return;
-                        }
-                        if (mj.Hub && typeof mj.Hub.Queue === 'function') {
-                          mj.Hub.Queue(['Typeset', mj.Hub]);
-                        }
-                      } catch (_) {}
-                    };
-                  }
-                } catch (_) {}
-              }
-
-              try {
-                var current = window && window.MathJax;
-                ensureMathJaxShims(current);
-
-                var _mj = current;
-                Object.defineProperty(window, 'MathJax', {
-                  configurable: true,
-                  enumerable: true,
-                  get: function(){ return _mj; },
-                  set: function(v){ _mj = v; ensureMathJaxShims(_mj); },
-                });
-              } catch (_) {}
-            })();
           </script>
           <script async id="MathJax-script" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-          <script>
-            (function(){
-              var _mj = window.MathJax;
-              function patch(obj){
-                if (!obj || typeof obj !== 'object') obj = {};
-                if (typeof obj.typesetPromise !== 'function') {
-                  obj.typesetPromise = function(){
-                    try { return Promise.resolve(); } catch (e) { return { then: function(r){ r(); } }; }
-                  };
-                }
-                if (typeof obj.typeset !== 'function') {
-                  obj.typeset = function(){};
-                }
-                if (!obj.startup || typeof obj.startup !== 'object') obj.startup = {};
-                if (!obj.startup.promise) {
-                  try { obj.startup.promise = Promise.resolve(); } catch (e) { obj.startup.promise = { then: function(r){ r(); } }; }
-                }
-                return obj;
-              }
-              function enforce(){
-                try { _mj = patch(window.MathJax); } catch (e) {}
-                try { window.MathJax = _mj; } catch (e) {}
-              }
-              try {
-                Object.defineProperty(window, 'MathJax', {
-                  configurable: true,
-                  get: function(){ return _mj; },
-                  set: function(v){ _mj = patch(v); }
-                });
-              } catch (e) {
-                // ignore
-              }
-              enforce();
-              try { setTimeout(enforce, 0); } catch (e) {}
-              try { document.addEventListener('DOMContentLoaded', enforce); } catch (e) {}
-            })();
-          </script>
+          ` : ''}
           <script>
             (function(){
               function inject(src, onload, onerror){
@@ -316,19 +256,122 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           </script>
           <script>
             (function(){
+              try {
+                if (!window.fetch) return;
+                var _fetch = window.fetch;
+                window.fetch = function(input, init){
+                  try {
+                    var url = '';
+                    if (typeof input === 'string') url = input;
+                    else if (input && typeof input.url === 'string') url = input.url;
+                    if (url && url.indexOf('https://generativelanguage.googleapis.com/') === 0 && url.indexOf('imagen-') !== -1) {
+                      try {
+                        var u = new URL(url);
+                        var k = u.searchParams.get('key');
+                        if (!k) {
+                          var png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2j9JkAAAAASUVORK5CYII=';
+                          var body = JSON.stringify({
+                            predictions: [{ bytesBase64Encoded: png }],
+                            candidates: [{ content: { parts: [{ inlineData: { data: png } }] } }],
+                          });
+                          return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                        }
+                      } catch (e) {
+                        if (/key=(&|$)/.test(url)) {
+                          var png2 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2j9JkAAAAASUVORK5CYII=';
+                          var body2 = JSON.stringify({
+                            predictions: [{ bytesBase64Encoded: png2 }],
+                            candidates: [{ content: { parts: [{ inlineData: { data: png2 } }] } }],
+                          });
+                          return Promise.resolve(new Response(body2, { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                        }
+                      }
+                    }
+                  } catch (e) {}
+                  return _fetch(input, init);
+                };
+              } catch (e) {}
+            })();
+          </script>
+          <script>
+            (function(){
               function send(l,a){
+                try {
+                  if (l === 'error' && a && a.length) {
+                    var first = a[0];
+                    var msg = '';
+                    if (typeof first === 'string') msg = first;
+                    else if (first && typeof first.message === 'string') msg = first.message;
+                    else msg = String(first);
+                    if (msg && msg.indexOf('Error generando imágenes') !== -1) return;
+                  }
+                } catch (e) {}
                 try{parent.postMessage({__slideLog:true,level:l,args:Array.prototype.slice.call(a).map(function(x){try{return x.stack||x.message||String(x)}catch(e){return String(x)}})},"*");}catch(e){}
               }
               var levels=['log','warn','error'];
               for(var i=0;i<levels.length;i++){(function(n){var o=console[n];console[n]=function(){send(n,arguments);if(o) o.apply(console,arguments);};})(levels[i]);}
               window.addEventListener('error',function(e){
                 var msg = e.message || '';
+                if (msg === 'Script error.' && (!e.filename || e.filename === '') && (e.lineno === 0 || e.lineno === undefined) && (e.colno === 0 || e.colno === undefined)) {
+                  return;
+                }
                 if (msg.indexOf('SyntaxError') !== -1 && e.filename && e.filename.indexOf('blob:') === 0) {
                   return;
                 }
                 send('error',[e.message,e.filename,e.lineno,e.colno]);
               });
               window.addEventListener('unhandledrejection',function(e){send('error',['unhandledrejection',e.reason&& (e.reason.stack||e.reason.message||String(e.reason))]);});
+            })();
+          </script>
+          <script>
+            (function(){
+              function wrap(fn){
+                try {
+                  if (typeof fn !== 'function') return fn;
+                  if (fn && fn.__slidePatched) return fn;
+                  var w = function(){
+                    try {
+                      // @ts-ignore
+                      return fn.apply(this, arguments);
+                    } catch (e) {
+                      try { console.warn('[SLIDE] generateNewImages falló (capturado)'); } catch (e2) {}
+                      return null;
+                    }
+                  };
+                  try { w.__slidePatched = true; } catch (e) {}
+                  return w;
+                } catch (e) {
+                  return fn;
+                }
+              }
+
+              function patchNow(){
+                try {
+                  if (typeof window.generateNewImages === 'function') {
+                    window.generateNewImages = wrap(window.generateNewImages);
+                  }
+                } catch (e) {}
+              }
+
+              try {
+                if (typeof window.generateNewImages === 'function') {
+                  patchNow();
+                } else {
+                  var val;
+                  try {
+                    val = window.generateNewImages;
+                  } catch (e) {}
+                  try {
+                    Object.defineProperty(window, 'generateNewImages', {
+                      configurable: true,
+                      get: function(){ return val; },
+                      set: function(v){ val = wrap(v); }
+                    });
+                  } catch (e) {}
+                  try { setTimeout(patchNow, 0); } catch (e) {}
+                  try { window.addEventListener('load', patchNow); } catch (e) {}
+                }
+              } catch (e) {}
             })();
           </script>
           <script>
@@ -403,11 +446,229 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           ${headHtml}
           ${baseStylesHtml}
           <script>
+            (function(){
+              var forceFit = false;
+              try { forceFit = (document && document.documentElement && document.documentElement.getAttribute('data-force-fit') === 'true'); } catch (e) {}
+
+              function dims(el){
+                try {
+                  var r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+                  var w = Math.max(el && el.scrollWidth ? el.scrollWidth : 0, el && el.offsetWidth ? el.offsetWidth : 0, r ? r.width : 0);
+                  var h = Math.max(el && el.scrollHeight ? el.scrollHeight : 0, el && el.offsetHeight ? el.offsetHeight : 0, r ? r.height : 0);
+                  return { w: w, h: h };
+                } catch (e) {
+                  return { w: 0, h: 0 };
+                }
+              }
+
+              function fit(){
+                try {
+                  var viewport = document.getElementById('__slide_viewport');
+                  var frameEl = document.getElementById('__slide_frame');
+                  var scaleEl = document.getElementById('__slide_scale');
+                  var contentEl = document.getElementById('__slide_content');
+                  if (!viewport || !frameEl || !scaleEl || !contentEl) return;
+
+                  try {
+                    if (!viewport.getAttribute('data-base-overflow')) {
+                      try {
+                        var cov = window.getComputedStyle(viewport).overflow;
+                        viewport.setAttribute('data-base-overflow', cov || '');
+                      } catch (e) {
+                        viewport.setAttribute('data-base-overflow', viewport.style.overflow || '');
+                      }
+                    }
+                  } catch (e) {}
+
+                  try {
+                    if (!viewport.getAttribute('data-base-padding')) {
+                      try {
+                        var cps = window.getComputedStyle(viewport);
+                        var p = (cps.paddingTop || '0') + ' ' + (cps.paddingRight || '0') + ' ' + (cps.paddingBottom || '0') + ' ' + (cps.paddingLeft || '0');
+                        viewport.setAttribute('data-base-padding', p);
+                      } catch (e) {
+                        viewport.setAttribute('data-base-padding', viewport.style.padding || '');
+                      }
+                    }
+                  } catch (e) {}
+
+                  scaleEl.style.transform = '';
+                  scaleEl.style.width = '';
+                  scaleEl.style.height = '';
+
+                  frameEl.style.width = '';
+                  frameEl.style.height = '';
+                  frameEl.style.overflow = '';
+
+                  try {
+                    var baseOv = viewport.getAttribute('data-base-overflow');
+                    viewport.style.overflow = (baseOv === null) ? '' : baseOv;
+                  } catch (e) {}
+
+                  try {
+                    var basePad = viewport.getAttribute('data-base-padding');
+                    viewport.style.padding = (basePad === null) ? '' : basePad;
+                  } catch (e) {}
+
+                  var vw = viewport.clientWidth || 0;
+                  var vh = viewport.clientHeight || 0;
+                  if (vw <= 0 || vh <= 0) return;
+
+                  var padX = 0;
+                  var padY = 0;
+                  try {
+                    var cs = window.getComputedStyle(viewport);
+                    padX = (parseFloat(cs.paddingLeft || '0') || 0) + (parseFloat(cs.paddingRight || '0') || 0);
+                    padY = (parseFloat(cs.paddingTop || '0') || 0) + (parseFloat(cs.paddingBottom || '0') || 0);
+                  } catch (e) {}
+
+                  var aw = Math.max(0, vw - padX);
+                  var ah = Math.max(0, vh - padY);
+                  if (aw <= 0 || ah <= 0) return;
+
+                  var kids = Array.prototype.slice.call(contentEl.children || []).filter(function(n){
+                    try {
+                      var tag = (n && n.tagName) ? String(n.tagName).toUpperCase() : '';
+                      return tag && tag !== 'SCRIPT' && tag !== 'STYLE';
+                    } catch (e) {
+                      return false;
+                    }
+                  });
+                  var target = (kids.length === 1) ? kids[0] : contentEl;
+
+                  var d = dims(target);
+                  var w = d.w, h = d.h;
+                  if (!w || !h) {
+                    var d2 = dims(contentEl);
+                    w = w || d2.w;
+                    h = h || d2.h;
+                  }
+                  if ((!w || !h) && forceFit) {
+                    try {
+                      var de0 = document && document.documentElement;
+                      var b0 = document && document.body;
+                      if (de0) {
+                        w = Math.max(w || 0, de0.scrollWidth || 0, de0.offsetWidth || 0);
+                        h = Math.max(h || 0, de0.scrollHeight || 0, de0.offsetHeight || 0);
+                      }
+                      if (b0) {
+                        w = Math.max(w || 0, b0.scrollWidth || 0, b0.offsetWidth || 0);
+                        h = Math.max(h || 0, b0.scrollHeight || 0, b0.offsetHeight || 0);
+                      }
+                    } catch (e) {}
+                  }
+                  if (!w || !h) return;
+
+                  if (forceFit) {
+                    try {
+                      var de = document && document.documentElement;
+                      var b = document && document.body;
+                      if (de) {
+                        w = Math.max(w, de.scrollWidth || 0, de.offsetWidth || 0);
+                        h = Math.max(h, de.scrollHeight || 0, de.offsetHeight || 0);
+                      }
+                      if (b) {
+                        w = Math.max(w, b.scrollWidth || 0, b.offsetWidth || 0);
+                        h = Math.max(h, b.scrollHeight || 0, b.offsetHeight || 0);
+                      }
+                    } catch (e) {}
+                    if (!w || !h) return;
+                  }
+
+                  var heightOverflow = h > ah * 1.02;
+                  var widthOverflow = w > aw * 1.02;
+                  if (!forceFit && !heightOverflow && !widthOverflow) return;
+
+                  var isMedia = false;
+                  try {
+                    var t = (target && target.tagName) ? String(target.tagName).toUpperCase() : '';
+                    isMedia = t === 'IMG' || t === 'SVG' || t === 'CANVAS' || t === 'VIDEO';
+                  } catch (e) {}
+
+                  var textLen = 0;
+                  try { textLen = String(contentEl.textContent || '').trim().length; } catch (e) {}
+                  var likelyDocument = textLen > 6000;
+                  var singleRoot = kids.length === 1;
+
+                  var looksLikeSlide = (widthOverflow && heightOverflow) || (isMedia && (heightOverflow || widthOverflow));
+                  if (!looksLikeSlide && singleRoot && heightOverflow && !likelyDocument) looksLikeSlide = true;
+                  if (!looksLikeSlide && singleRoot && widthOverflow && !likelyDocument) looksLikeSlide = true;
+                  if (!looksLikeSlide) {
+                    try {
+                      var st = target && target.getAttribute ? target.getAttribute('style') : '';
+                      if (st && /height\s*:\s*\d+px/i.test(st) && heightOverflow && !likelyDocument) looksLikeSlide = true;
+                    } catch (e) {}
+                  }
+                  if (!forceFit && !looksLikeSlide) return;
+
+                  var s = Math.min(1, aw / w, ah / h);
+                  if (!isFinite(s) || s <= 0 || s >= 0.999) return;
+                  if (forceFit && s < 0.2) {
+                    try { viewport.style.overflow = 'auto'; } catch (e) {}
+                    try { viewport.style.padding = '1.5rem'; } catch (e) {}
+                    return;
+                  }
+                  if (!forceFit && s < 0.2) s = 0.2;
+
+                  var sw = Math.max(1, Math.round(w * s));
+                  var sh = Math.max(1, Math.round(h * s));
+                  frameEl.style.width = sw + 'px';
+                  frameEl.style.height = sh + 'px';
+                  frameEl.style.overflow = 'hidden';
+
+                  scaleEl.style.width = w + 'px';
+                  scaleEl.style.height = h + 'px';
+                  scaleEl.style.transformOrigin = 'top center';
+                  scaleEl.style.transform = 'scale(' + s + ')';
+
+                  if (forceFit) {
+                    try { viewport.style.overflow = 'hidden'; } catch (e) {}
+                    try { viewport.style.padding = '0px'; } catch (e) {}
+                  }
+                } catch (e) {}
+              }
+
+              var timer = null;
+              function schedule(){
+                try { if (timer) clearTimeout(timer); } catch (e) {}
+                timer = setTimeout(function(){ timer = null; fit(); }, 60);
+              }
+
+              try {
+                if (document && document.readyState && document.readyState !== 'loading') schedule();
+                else document.addEventListener('DOMContentLoaded', schedule);
+              } catch (e) {}
+              try { window.addEventListener('load', schedule); } catch (e) {}
+              try { window.addEventListener('resize', schedule); } catch (e) {}
+              try {
+                if (forceFit) {
+                  setTimeout(schedule, 200);
+                  setTimeout(schedule, 800);
+                  setTimeout(schedule, 2000);
+                }
+              } catch (e) {}
+              try {
+                var lastObs = 0;
+                var mo = new MutationObserver(function(){
+                  var now = Date.now();
+                  if (now - lastObs < (forceFit ? 200 : 80)) return;
+                  lastObs = now;
+                  schedule();
+                });
+                var root = null;
+                try { root = document.getElementById('__slide_content') || document.body || document.documentElement; } catch (e) {}
+                if (root) mo.observe(root, { childList: true, subtree: true });
+              } catch (e) {}
+              try { window.__fitSlideToViewport = schedule; } catch (e) {}
+            })();
+          </script>
+          <script>
               (function(){
               function start() {
                   var rendering = false;
                   var scheduled = null;
                   var hasMathJax = false;
+                  var allowMathJax = false;
 
                   function detectMathJax() {
                       try {
@@ -426,7 +687,11 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                       return false;
                   }
 
-                  hasMathJax = detectMathJax();
+                  try {
+                      allowMathJax = (document && document.documentElement && document.documentElement.getAttribute('data-enable-mathjax') === 'true');
+                  } catch (e) {}
+
+                  hasMathJax = allowMathJax && detectMathJax();
 
                   function getAutoRender(){
                       try {
@@ -968,7 +1233,13 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           </script>
       </head>
       <body>
-          ${bodyHtml}
+          <div id="__slide_viewport">
+            <div id="__slide_frame">
+              <div id="__slide_scale">
+                <div id="__slide_content">${bodyHtml}</div>
+              </div>
+            </div>
+          </div>
       </body>
       </html>
   `;

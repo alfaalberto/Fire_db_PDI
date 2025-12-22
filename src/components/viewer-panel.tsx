@@ -65,6 +65,9 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
   useEffect(() => {
     const currentId = slide?.id ?? null;
     const prevId = prevSlideIdRef.current;
+    if (prevId !== currentId) {
+      setCarouselApi(null);
+    }
     // Reset sub-slide index on actual navigation to a new, valid slide id
     if (prevId !== currentId && currentId !== null) {
       try { console.log('[VIEWER] slide id changed', { prevId, currentId, action: 'resetSubSlideIndex' }); } catch {}
@@ -106,6 +109,19 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
           }
         } else {
           args.unshift('[SLIDE]');
+        }
+        if (lvl === 'error' && args.length >= 4 && String(args[1]) === 'Script error.') {
+          const hasFilename = args.length >= 5 && typeof args[2] === 'string';
+          const filename = hasFilename ? (args[2] as string) : '';
+          const line = hasFilename ? args[3] : args[2];
+          const col = hasFilename ? args[4] : args[3];
+          if (
+            (filename === '' || filename === null || filename === undefined) &&
+            String(line) === '0' &&
+            String(col) === '0'
+          ) {
+            return;
+          }
         }
         (console[lvl] || console.log)(...args);
       }
@@ -154,6 +170,7 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
   const totalSubSlides = hasStoredContent ? slide!.content!.length : 1;
   const effectiveSubSlideIndex = hasStoredContent ? Math.min(subSlideIndex, totalSubSlides - 1) : 0;
   const currentSlideContent = hasStoredContent ? (slide!.content?.[effectiveSubSlideIndex] || '') : '';
+  const forceFit = !!slide?.id && slide.id.includes('the-basics-of-filtering-in-the-frequency-domain');
   const generatedSlideHtml = useMemo(() => {
     if (!slide) {
       return buildTocHtml(index);
@@ -456,14 +473,14 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
   if (!slide) {
     const canNavigate = !!prevSlideId || !!nextSlideId;
     return (
-      <div className="flex-1 bg-background flex flex-col h-full relative">
+      <div className="flex-1 w-full bg-background flex flex-col h-full relative min-w-0 overflow-x-hidden">
         {!isPresentationMode && (
-          <header className="bg-card p-2 flex items-center justify-between text-foreground border-b border-border shrink-0">
+          <header className="bg-card p-2 flex flex-wrap items-center justify-between gap-2 text-foreground border-b border-border shrink-0">
             <div className="flex flex-col min-w-0 px-2 overflow-hidden">
               <div className="text-xs text-muted-foreground truncate">Índice</div>
               <div className="text-sm font-medium truncate">Selecciona un tema para comenzar</div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
               <Button onClick={togglePresentationMode} variant="ghost" size="icon" disabled={!canPresent} title="Modo presentación">
                 <Maximize size={18} />
               </Button>
@@ -502,10 +519,10 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
   }
 
   return (
-    <div className="flex-1 bg-background flex flex-col h-full relative">
+    <div className="flex-1 w-full bg-background flex flex-col h-full relative min-w-0 overflow-x-hidden">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".html" className="hidden" />
       {!isPresentationMode && (
-          <header className="bg-card p-2 flex items-center justify-between text-foreground border-b border-border shrink-0">
+          <header className="bg-card p-2 flex flex-wrap items-center justify-between gap-2 text-foreground border-b border-border shrink-0">
             <div className="flex flex-col min-w-0 px-2 overflow-hidden">
                 {breadcrumbs.length > 0 && (
                     <div className="flex items-center text-xs text-muted-foreground space-x-1 truncate">
@@ -518,7 +535,7 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
                     </div>
                 )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm"><PlusCircle /> Añadir</Button>
@@ -629,6 +646,7 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
                           content={content || ''}
                           title={`${slide.title} (${i + 1}/${totalSubSlides})`}
                           presentationMode={isPresentationMode}
+                          forceFit={forceFit}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -641,13 +659,13 @@ export function ViewerPanel({ slide, index, canPresent, onSave, onRelocate, isPr
               </CarouselContent>
             </Carousel>
           ) : (
-            <SlideIframe ref={iframeRef} content={displayedSlideHtml} title={slide.title} presentationMode={isPresentationMode} />
+            <SlideIframe ref={iframeRef} content={displayedSlideHtml} title={slide.title} presentationMode={isPresentationMode} forceFit={forceFit} />
           )
         )}
       </main>
 
       {!isEditing && !isPresentationMode && hasStoredContent && totalSubSlides > 0 && (
-        <footer className="bg-card p-2 flex items-center justify-center gap-4 text-foreground border-t">
+        <footer className="bg-card p-2 flex flex-wrap items-center justify-center gap-4 text-foreground border-t min-w-0 overflow-x-hidden">
           <Button onClick={() => setSubSlideIndex(i => i - 1)} disabled={subSlideIndex === 0} variant="outline" size="sm">Anterior</Button>
           <div className="flex items-center gap-2">
             <span className="text-sm">{subSlideIndex + 1} / {totalSubSlides}</span>

@@ -367,7 +367,7 @@ export default function AppShell() {
 
   return (
     <AppContext.Provider value={{ togglePresentationMode: handlePresentationToggle }}>
-        <div className={cn("flex h-screen bg-background text-foreground", isPresentationMode && "presentation-mode")}>
+        <div className={cn("flex h-screen bg-background text-foreground overflow-hidden", isPresentationMode && "presentation-mode")}>
           <SidebarProvider open={isPanelOpen} onOpenChange={setIsPanelOpen} defaultOpen={!isMobile}>
             <div className={cn("flex h-full w-full")}>
                 <div className={cn(isPresentationMode && "hidden")}>
@@ -381,7 +381,7 @@ export default function AppShell() {
                         />
                     </Sidebar>
                 </div>
-                <main className="flex-1 flex flex-col min-h-0">
+                <main className="flex-1 flex flex-col min-h-0 min-w-0">
                     <ViewerPanel
                         slide={selectedSlide}
                         index={index}
