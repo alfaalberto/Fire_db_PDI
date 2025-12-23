@@ -113,7 +113,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
               overflow: hidden;
               display: flex;
               justify-content: center;
-              align-items: flex-start;
+              align-items: center;
               padding: 16px;
             }
 
@@ -210,7 +210,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
   `;
   const fullHtml = String.raw`
       <!DOCTYPE html>
-      <html lang="es" data-force-fit="${forceFit ? 'true' : 'false'}" data-enable-mathjax="${enableMathJax ? 'true' : 'false'}">
+      <html lang="es" data-force-fit="${forceFit ? 'true' : 'false'}" data-enable-mathjax="${enableMathJax ? 'true' : 'false'}" data-presentation-mode="${presentationMode ? 'true' : 'false'}">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -297,6 +297,15 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
             (function(){
               function send(l,a){
                 try {
+                  var msg0 = '';
+                  try {
+                    msg0 = (a && a.length) ? (typeof a[0] === 'string' ? a[0] : (a[0] && a[0].message ? a[0].message : String(a[0]))) : '';
+                  } catch (e) {
+                    msg0 = '';
+                  }
+                  if (msg0 && (msg0.indexOf('ResizeObserver loop completed with undelivered notifications') !== -1 || msg0.indexOf('ResizeObserver loop limit exceeded') !== -1)) {
+                    return;
+                  }
                   if (l === 'error' && a && a.length) {
                     var first = a[0];
                     var msg = '';
@@ -312,6 +321,9 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
               for(var i=0;i<levels.length;i++){(function(n){var o=console[n];console[n]=function(){send(n,arguments);if(o) o.apply(console,arguments);};})(levels[i]);}
               window.addEventListener('error',function(e){
                 var msg = e.message || '';
+                if (msg && (msg.indexOf('ResizeObserver loop completed with undelivered notifications') !== -1 || msg.indexOf('ResizeObserver loop limit exceeded') !== -1)) {
+                  return;
+                }
                 if (msg === 'Script error.' && (!e.filename || e.filename === '') && (e.lineno === 0 || e.lineno === undefined) && (e.colno === 0 || e.colno === undefined)) {
                   return;
                 }
@@ -469,6 +481,11 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                   var contentEl = document.getElementById('__slide_content');
                   if (!viewport || !frameEl || !scaleEl || !contentEl) return;
 
+                  var isPresentation = false;
+                  try {
+                    isPresentation = (document && document.documentElement && document.documentElement.getAttribute('data-presentation-mode') === 'true');
+                  } catch (e) {}
+
                   try {
                     if (!viewport.getAttribute('data-base-overflow')) {
                       try {
@@ -577,6 +594,17 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
 
                   var heightOverflow = h > ah * 1.02;
                   var widthOverflow = w > aw * 1.02;
+                  if (!isPresentation) {
+                    if (!heightOverflow && !widthOverflow) {
+                      try { viewport.style.alignItems = 'center'; } catch (e) {}
+                      return;
+                    }
+                    if (heightOverflow && !widthOverflow) {
+                      try { viewport.style.alignItems = 'flex-start'; } catch (e) {}
+                      return;
+                    }
+                  }
+
                   if (!forceFit && !heightOverflow && !widthOverflow) return;
 
                   var isMedia = false;
@@ -601,9 +629,9 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                   }
                   if (!forceFit && !looksLikeSlide) return;
 
-                  var s = Math.min(1, aw / w, ah / h);
+                  var s = isPresentation ? Math.min(1, aw / w, ah / h) : Math.min(1, aw / w);
                   if (!isFinite(s) || s <= 0 || s >= 0.999) return;
-                  if (forceFit && s < 0.2) {
+                  if (isPresentation && forceFit && s < 0.2) {
                     try { viewport.style.overflow = 'auto'; } catch (e) {}
                     try { viewport.style.padding = '1.5rem'; } catch (e) {}
                     return;
@@ -616,13 +644,21 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                   frameEl.style.height = sh + 'px';
                   frameEl.style.overflow = 'hidden';
 
+                  try {
+                    viewport.style.alignItems = (sh <= ah * 0.98) ? 'center' : 'flex-start';
+                  } catch (e) {}
+
                   scaleEl.style.width = w + 'px';
                   scaleEl.style.height = h + 'px';
                   scaleEl.style.transformOrigin = 'top center';
                   scaleEl.style.transform = 'scale(' + s + ')';
 
                   if (forceFit) {
-                    try { viewport.style.overflow = 'hidden'; } catch (e) {}
+                    if (isPresentation) {
+                      try { viewport.style.overflow = 'hidden'; } catch (e) {}
+                    } else {
+                      try { viewport.style.overflow = 'auto'; } catch (e) {}
+                    }
                     try { viewport.style.padding = '0px'; } catch (e) {}
                   }
                 } catch (e) {}
