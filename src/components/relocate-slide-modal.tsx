@@ -70,7 +70,7 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
 
     return (
       <div
-        key={`insert-${parentId || 'root'}-${position}`}
+        key={`insert-${parentId || 'root'}-${position}-${label}`}
         className={cn(
           "flex items-center py-1 px-2 cursor-pointer transition-all group",
           isSelected && "bg-primary/10"
@@ -167,29 +167,14 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
     if (isExpanded && !disabled) {
       // CASE 1: If item has structural children (sub-sections/sub-folders)
       if (hasChildren) {
-        // Add insertion point at the beginning of children
-        if (!isCurrentItem) {
-          childrenElements.push(
-            renderInsertionPoint(item.id, 0, `Insertar al inicio de "${item.title}"`, depth + 1)
-          );
-        }
-
         // Render children
         item.children!.forEach((child, idx) => {
           const childElements = renderTreeItem(child, depth + 1, item.children!, idx);
           childrenElements.push(...childElements);
         });
-
-        // Add insertion point at the end of children (if last child is not the current item)
-        const lastChild = item.children![item.children!.length - 1];
-        if (lastChild.id !== slide.id) {
-          childrenElements.push(
-            renderInsertionPoint(item.id, item.children!.length, `Insertar al final de "${item.title}"`, depth + 1)
-          );
-        }
       }
       // CASE 2: If item has content (individual slides) but no children
-      else if (hasContent && !hasChildren) {
+      else if (false && hasContent && !hasChildren) {
         // Render each individual slide in the content array
         item.content!.forEach((slideHtml, slideIdx) => {
           const slideNumber = slideIdx + 1;
@@ -298,9 +283,7 @@ export function RelocateSlideModal({ isOpen, onClose, onConfirm, slide, index }:
 
         <div className="flex-1 min-h-0 border rounded-md bg-background mt-2">
           <ScrollArea className="h-[500px] p-2">
-            {rootInsertionPoints[0]}
             {allElements}
-            {rootInsertionPoints[1]}
           </ScrollArea>
         </div>
 

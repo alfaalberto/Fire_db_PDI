@@ -5,7 +5,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Sidebar, SidebarProvider } from '@/components/ui/sidebar';
 import { IndexPanel } from '@/components/index-panel';
 import { ViewerPanel } from '@/components/viewer-panel';
-import { RelocateSlideModal } from '@/components/relocate-slide-modal';
+import { RelocateThumbnailsModal } from '@/components/relocate-thumbnails-modal';
 import type { IndexItem } from '@/lib/types';
 import { INDEX as INITIAL_INDEX } from '@/lib/constants';
 import { loadAllSlidesCached, saveSlide } from '@/lib/services/slides';
@@ -155,10 +155,12 @@ export default function AppShell() {
   const [index, setIndex] = useState<IndexItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedSlideId, setSelectedSlideId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [relocateModalOpen, setRelocateModalOpen] = useState(false);
-  const [slideToRelocate, setSlideToRelocate] = useState<IndexItem | null>(null);
+  const [itemsToRelocate, setItemsToRelocate] = useState<IndexItem[]>([]);
   const [firestoreWriteDisabled, setFirestoreWriteDisabled] = useState(false);
 
   useEffect(() => {
@@ -229,11 +231,24 @@ export default function AppShell() {
   }, []);
 
   const flatIndex = useMemo(() => flattenIndex(index), [index]);
+  const flatIds = useMemo(() => flatIndex.map(item => item.id), [flatIndex]);
   const selectedSlide = useMemo(() => flatIndex.find(item => item.id === selectedSlideId) || null, [flatIndex, selectedSlideId]);
   const selectedSlideIndex = useMemo(() => flatIndex.findIndex(s => s.id === selectedSlideId), [flatIndex, selectedSlideId]);
   const prevSlideId = useMemo(() => selectedSlideIndex > 0 ? flatIndex[selectedSlideIndex - 1].id : null, [flatIndex, selectedSlideIndex]);
   const nextSlideId = useMemo(() => selectedSlideIndex < flatIndex.length - 1 ? flatIndex[selectedSlideIndex + 1].id : null, [flatIndex, selectedSlideIndex]);
   const breadcrumbs = useMemo(() => selectedSlideId ? findPath(index, selectedSlideId) : [], [index, selectedSlideId]);
+
+  const normalizeSelection = useCallback((ids: Set<string>) => {
+    const selectedSet = new Set(ids);
+    const topLevel = Array.from(selectedSet).filter((id) => {
+      const path = findPath(index, id);
+      if (!path) return false;
+      return !path.slice(0, -1).some(p => selectedSet.has(p.id));
+    });
+
+    topLevel.sort((a, b) => flatIds.indexOf(a) - flatIds.indexOf(b));
+    return topLevel;
+  }, [index, flatIds]);
 
   const handleIndexChange = useCallback((newIndex: IndexItem[]) => {
     setIndex(newIndex);
@@ -275,49 +290,272 @@ export default function AppShell() {
     [firestoreWriteDisabled],
   );
 
-  const handleRelocate = useCallback((newParentId: string | null, newPosition: number) => {
-    if (!slideToRelocate) return;
+  const handleRelocate = useCallback((newParentId: string | null, newPosition: number, moveIdsOverride?: string[]) => {
+    const baseIds = moveIdsOverride && moveIdsOverride.length > 0
+      ? moveIdsOverride
+      : itemsToRelocate.map(i => i.id);
+    if (baseIds.length === 0) return;
+
+    const moveIds = normalizeSelection(new Set(baseIds));
+    if (moveIds.length === 0) return;
+
     const newIndex = produce(index, (draft: IndexItem[]) => {
-      const result = findItemWithParent(draft, slideToRelocate.id);
-      if (!result) return;
-      const { item: itemToMove, parent: oldParent } = result;
-      if (oldParent) {
-        oldParent.children = oldParent.children?.filter(child => child.id !== itemToMove.id);
-      } else {
-        draft.splice(draft.findIndex(item => item.id === itemToMove.id), 1);
+      const movedItems: IndexItem[] = [];
+
+      for (const id of moveIds) {
+        const result = findItemWithParent(draft, id);
+        if (!result) continue;
+        const { item, parent } = result;
+
+        if (parent) {
+          if (!parent.children) parent.children = [];
+          const idx = parent.children.findIndex(child => child.id === id);
+          if (idx >= 0) {
+            parent.children.splice(idx, 1);
+          }
+        } else {
+          const idx = draft.findIndex(child => child.id === id);
+          if (idx >= 0) {
+            draft.splice(idx, 1);
+          }
+        }
+
+        movedItems.push(item);
       }
-      itemToMove.parentId = newParentId || undefined;
+
+      let destinationArray: IndexItem[] = draft;
+      let actualParentId: string | null = newParentId;
+
       if (newParentId) {
         const newParent = findItem(draft, newParentId);
         if (newParent) {
-            if (!newParent.children) newParent.children = [];
-            newParent.children.splice(newPosition, 0, itemToMove);
+          if (!newParent.children) newParent.children = [];
+          destinationArray = newParent.children;
+        } else {
+          actualParentId = null;
+          destinationArray = draft;
         }
-      } else {
-        draft.splice(newPosition, 0, itemToMove);
       }
+
+      const clamped = Math.max(0, Math.min(newPosition, destinationArray.length));
+      movedItems.forEach((item, offset) => {
+        item.parentId = actualParentId || undefined;
+        destinationArray.splice(clamped + offset, 0, item);
+      });
     });
+
     handleIndexChange(newIndex);
     setRelocateModalOpen(false);
-    setSlideToRelocate(null);
-  }, [index, slideToRelocate, handleIndexChange]);
+    setItemsToRelocate([]);
+  }, [index, itemsToRelocate, handleIndexChange, normalizeSelection]);
+
+  const handleMoveSubSlide = useCallback((sourceParentId: string, sourceIndex: number, destParentId: string, destIndex: number) => {
+    if (!sourceParentId || !destParentId) return;
+    if (sourceIndex < 0 || destIndex < 0) return;
+
+    let sourceToSave: string[] | null = null;
+    let destToSave: string[] | null = null;
+
+    const newIndex = produce(index, (draft: IndexItem[]) => {
+      const source = findItem(draft, sourceParentId);
+      const dest = findItem(draft, destParentId);
+      if (!source || !dest) return;
+
+      const sourceArr = Array.isArray(source.content) ? [...source.content] : [];
+      if (sourceIndex >= sourceArr.length) return;
+
+      const moved = sourceArr[sourceIndex];
+      sourceArr.splice(sourceIndex, 1);
+
+      if (sourceParentId === destParentId) {
+        const adjusted = destIndex > sourceIndex ? destIndex - 1 : destIndex;
+        const clamped = Math.max(0, Math.min(adjusted, sourceArr.length));
+        sourceArr.splice(clamped, 0, moved);
+        source.content = sourceArr;
+        sourceToSave = [...sourceArr];
+        return;
+      }
+
+      const destArr = Array.isArray(dest.content) ? [...dest.content] : [];
+      const clamped = Math.max(0, Math.min(destIndex, destArr.length));
+      destArr.splice(clamped, 0, moved);
+
+      source.content = sourceArr;
+      dest.content = destArr;
+      sourceToSave = [...sourceArr];
+      destToSave = [...destArr];
+    });
+
+    handleIndexChange(newIndex);
+
+    const persist = (id: string, content: string[] | null) => {
+      if (firestoreWriteDisabled) {
+        console.warn(
+          'Skipping remote save for slide because Firestore writes are temporarily disabled after resource-exhausted.',
+          { id },
+        );
+        return;
+      }
+      void saveSlide(id, content).catch((error) => {
+        console.error('Failed to save slide:', error);
+        const code = (error as { code?: string }).code;
+        if (code === 'resource-exhausted') {
+          console.error(
+            'Disabling further Firestore writes for this session after resource-exhausted error.',
+          );
+          setFirestoreWriteDisabled(true);
+        }
+      });
+    };
+
+    if (sourceToSave) persist(sourceParentId, sourceToSave);
+    if (destToSave) persist(destParentId, destToSave);
+  }, [firestoreWriteDisabled, handleIndexChange, index]);
+
+  const handlePasteSubSlides = useCallback((
+    mode: 'copy' | 'cut',
+    sources: Array<{ parentId: string; index: number }>,
+    destParentId: string,
+    destIndex: number,
+    htmls: string[],
+  ) => {
+    if (!destParentId) return;
+    if (!Array.isArray(htmls) || htmls.length === 0) return;
+    if (destIndex < 0) return;
+
+    const sourcesByParent = new Map<string, number[]>();
+    if (mode === 'cut') {
+      for (const s of sources) {
+        if (!s?.parentId) continue;
+        if (!Number.isFinite(s.index) || s.index < 0) continue;
+        const arr = sourcesByParent.get(s.parentId) ?? [];
+        arr.push(s.index);
+        sourcesByParent.set(s.parentId, arr);
+      }
+      for (const [pid, idxs] of sourcesByParent) {
+        const uniq = Array.from(new Set(idxs));
+        uniq.sort((a, b) => b - a);
+        sourcesByParent.set(pid, uniq);
+      }
+    }
+
+    const idsToSave = new Map<string, string[] | null>();
+
+    const newIndex = produce(index, (draft: IndexItem[]) => {
+      if (mode === 'cut') {
+        for (const [pid, idxsDesc] of sourcesByParent) {
+          const src = findItem(draft, pid);
+          if (!src) continue;
+          const arr = Array.isArray(src.content) ? [...src.content] : [];
+          for (const idx of idxsDesc) {
+            if (idx >= 0 && idx < arr.length) arr.splice(idx, 1);
+          }
+          src.content = arr;
+          idsToSave.set(pid, [...arr]);
+        }
+      }
+
+      const dest = findItem(draft, destParentId);
+      if (!dest) return;
+
+      const destArr = Array.isArray(dest.content) ? [...dest.content] : [];
+      let adjustedDestIndex = destIndex;
+      if (mode === 'cut') {
+        const removed = sourcesByParent.get(destParentId);
+        if (removed && removed.length > 0) {
+          const removedBefore = removed.filter((i) => i < destIndex).length;
+          adjustedDestIndex = Math.max(0, destIndex - removedBefore);
+        }
+      }
+
+      const clamped = Math.max(0, Math.min(adjustedDestIndex, destArr.length));
+      const insert = htmls.filter((h) => typeof h === 'string');
+      if (insert.length === 0) return;
+
+      destArr.splice(clamped, 0, ...insert);
+      dest.content = destArr;
+      idsToSave.set(destParentId, [...destArr]);
+    });
+
+    handleIndexChange(newIndex);
+
+    if (firestoreWriteDisabled) {
+      console.warn(
+        'Skipping remote save for slide because Firestore writes are temporarily disabled after resource-exhausted.',
+      );
+      return;
+    }
+
+    const persist = (id: string, content: string[] | null) => {
+      void saveSlide(id, content).catch((error) => {
+        console.error('Failed to save slide:', error);
+        const code = (error as { code?: string }).code;
+        if (code === 'resource-exhausted') {
+          console.error(
+            'Disabling further Firestore writes for this session after resource-exhausted error.',
+          );
+          setFirestoreWriteDisabled(true);
+        }
+      });
+    };
+
+    for (const [id, content] of idsToSave) {
+      persist(id, content);
+    }
+  }, [firestoreWriteDisabled, handleIndexChange, index]);
 
   const openRelocateModal = useCallback((slideId: string) => {
-    const slide = flatIndex.find(item => item.id === slideId);
-    if (slide) {
-      setSlideToRelocate(slide);
+    const useSelection = selectedIds.size > 0 && selectedIds.has(slideId);
+    const base = useSelection ? selectedIds : new Set([slideId]);
+    const moveIds = normalizeSelection(base);
+    const items = moveIds
+      .map(id => flatIndex.find(item => item.id === id))
+      .filter(Boolean) as IndexItem[];
+    if (items.length > 0) {
+      setItemsToRelocate(items);
       setRelocateModalOpen(true);
     }
-  }, [flatIndex]);
+  }, [flatIndex, normalizeSelection, selectedIds]);
 
-  const handleSelectSlide = useCallback((id: string) => {
+  const handleSelectSlide = useCallback((id: string, e: React.MouseEvent) => {
+    const isMulti = e.ctrlKey || e.metaKey;
+    const isRange = e.shiftKey;
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+
+      if (isRange && selectionAnchorId) {
+        const a = flatIds.indexOf(selectionAnchorId);
+        const b = flatIds.indexOf(id);
+        if (!isMulti) next.clear();
+        if (a >= 0 && b >= 0) {
+          const [start, end] = a < b ? [a, b] : [b, a];
+          for (let i = start; i <= end; i++) next.add(flatIds[i]);
+        } else {
+          next.add(id);
+        }
+        return next;
+      }
+
+      if (isMulti) {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }
+
+      next.clear();
+      next.add(id);
+      return next;
+    });
+
+    if (!isRange) setSelectionAnchorId(id);
     setSelectedSlideId(id);
     if (isMobile) setIsPanelOpen(false);
-  }, [isMobile]);
+  }, [flatIds, isMobile, selectionAnchorId]);
   
   const handleMoveItem = useCallback((dragId: string, dropId: string) => {
     if (dragId === dropId) return;
-    const newIndex = produce(index, (draft) => {
+    const newIndex = produce(index, (draft: IndexItem[]) => {
         const dragRes = findItemWithParent(draft, dragId);
         const dropRes = findItemWithParent(draft, dropId);
         if (!dragRes || !dropRes) return;
@@ -327,16 +565,16 @@ export default function AppShell() {
         
         // Remove dragItem from old location
         if (dragParent) {
-            dragParent.children = dragParent.children?.filter(c => c.id !== dragId);
+            dragParent.children = dragParent.children?.filter((c: IndexItem) => c.id !== dragId);
         } else {
-            const idx = draft.findIndex(c => c.id === dragId);
+            const idx = draft.findIndex((c: IndexItem) => c.id === dragId);
             if (idx >= 0) draft.splice(idx, 1);
         }
         
         // Insert before dropItem
         if (dropParent) {
             if (!dropParent.children) dropParent.children = [];
-            const idx = dropParent.children.findIndex(c => c.id === dropId);
+            const idx = dropParent.children.findIndex((c: IndexItem) => c.id === dropId);
             // Handle case where dropItem was moved/removed logic if siblings (simplified)
             // Re-find index in case mutation shifted things? 
             // Since we removed dragItem first, indices might shift if in same array.
@@ -345,13 +583,13 @@ export default function AppShell() {
             // dropParent might be same as dragParent.
             const freshDropParent = findItem(draft, dropParent.id);
             if(freshDropParent && freshDropParent.children) {
-                let freshIdx = freshDropParent.children.findIndex(c => c.id === dropId);
+                let freshIdx = freshDropParent.children.findIndex((c: IndexItem) => c.id === dropId);
                 if (freshIdx === -1) freshIdx = 0; 
                 freshDropParent.children.splice(freshIdx, 0, dragItem);
             }
             dragItem.parentId = dropParent.id;
         } else {
-            let idx = draft.findIndex(c => c.id === dropId);
+            let idx = draft.findIndex((c: IndexItem) => c.id === dropId);
             if (idx === -1) idx = 0;
             draft.splice(idx, 0, dragItem);
             dragItem.parentId = undefined;
@@ -376,6 +614,7 @@ export default function AppShell() {
                         data={index}
                         onSelect={handleSelectSlide}
                         activeSlideId={selectedSlideId}
+                        selectedIds={selectedIds}
                         onIndexChange={handleIndexChange}
                         onMove={handleMoveItem}
                         />
@@ -396,11 +635,13 @@ export default function AppShell() {
                     />
                 </main>
                 <div className={cn(isPresentationMode && "hidden")}>
-                    <RelocateSlideModal 
+                    <RelocateThumbnailsModal 
                         isOpen={relocateModalOpen}
                         onClose={() => setRelocateModalOpen(false)}
                         onConfirm={handleRelocate}
-                        slide={slideToRelocate}
+                        onMoveSubSlide={handleMoveSubSlide}
+                        onPasteSubSlides={handlePasteSubSlides}
+                        items={itemsToRelocate}
                         index={index}
                     />
                 </div>

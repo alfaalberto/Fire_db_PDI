@@ -11,13 +11,15 @@ interface IndexItemProps {
   item: IndexItemType;
   level: number;
   activeSlideId: string | null;
-  onSelect: (id: string) => void;
+  selectedIds: Set<string>;
+  onSelect: (id: string, e: React.MouseEvent) => void;
   onMove: (dragId: string, dropId: string) => void;
 }
 
-export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: IndexItemProps) {
+export function IndexItem({ item, level, activeSlideId, selectedIds, onSelect, onMove }: IndexItemProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = activeSlideId === item.id;
+  const isSelected = selectedIds.has(item.id);
   const isParentOfActive = !!activeSlideId && !!hasChildren ? containsId(item.children!, activeSlideId) : false;
   
   const [isOpen, setIsOpen] = useState(isParentOfActive);
@@ -30,7 +32,7 @@ export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: Inde
 
   const handleSelect = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelect(item.id);
+    onSelect(item.id, e);
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -65,7 +67,9 @@ export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: Inde
           "relative flex items-center justify-between group rounded-md cursor-pointer transition-all duration-200 mx-1 my-0.5",
           isActive 
             ? 'bg-primary/10 text-primary font-medium shadow-sm' 
-            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+            : isSelected
+              ? 'bg-muted/40 text-foreground'
+              : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
         )}
         style={{ paddingLeft: `${level * 0.75 + 0.5}rem` }}
         onClick={handleSelect}
@@ -73,7 +77,7 @@ export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: Inde
         {isActive && <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary rounded-r-full" />}
         <span className="flex-1 truncate py-2 pr-1 text-sm leading-none">{item.title}</span>
         {hasChildren && (
-          <CollapsibleTrigger asChild onClick={(e) => e.stopPropagation()}>
+          <CollapsibleTrigger asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
             <div className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-background/50 transition-colors">
               {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </div>
@@ -90,6 +94,7 @@ export function IndexItem({ item, level, activeSlideId, onSelect, onMove }: Inde
                 item={child}
                 level={level + 1}
                 activeSlideId={activeSlideId}
+                selectedIds={selectedIds}
                 onSelect={onSelect}
                 onMove={onMove}
               />

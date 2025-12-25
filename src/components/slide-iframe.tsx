@@ -40,9 +40,10 @@ interface SlideIframeProps {
   title: string;
   presentationMode?: boolean;
   forceFit?: boolean;
+  thumbnail?: boolean;
 }
 
-export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ content, title, presentationMode = false, forceFit = false }, ref) => {
+export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ content, title, presentationMode = false, forceFit = false, thumbnail = false }, ref) => {
   const trustSlides = process.env.NEXT_PUBLIC_TRUST_SLIDES !== 'false';
   const enableMathJax = process.env.NEXT_PUBLIC_ENABLE_MATHJAX === 'true';
   const { headHtml, bodyHtml } = useMemo(() => {
@@ -169,6 +170,18 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
             * {
               max-width: 100%;
             }
+
+            html[data-thumbnail="true"] #__slide_viewport {
+              overflow: hidden !important;
+              padding: 0px !important;
+              align-items: center !important;
+              justify-content: center !important;
+            }
+
+            html[data-thumbnail="true"] #__slide_content,
+            html[data-thumbnail="true"] #__slide_content * {
+              max-width: none !important;
+            }
             a { color: #60A5FA; }
             a:visited { color: #A78BFA; }
           </style>
@@ -210,7 +223,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
   `;
   const fullHtml = String.raw`
       <!DOCTYPE html>
-      <html lang="es" data-force-fit="${forceFit ? 'true' : 'false'}" data-enable-mathjax="${enableMathJax ? 'true' : 'false'}" data-presentation-mode="${presentationMode ? 'true' : 'false'}">
+      <html lang="es" data-force-fit="${forceFit ? 'true' : 'false'}" data-enable-mathjax="${enableMathJax ? 'true' : 'false'}" data-presentation-mode="${presentationMode ? 'true' : 'false'}" data-thumbnail="${thumbnail ? 'true' : 'false'}">
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -388,6 +401,46 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           </script>
           <script>
             (function(){
+              try {
+                // @ts-ignore
+                var proto = (window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype) ? window.CanvasRenderingContext2D.prototype : null;
+                if (!proto) return;
+                if (proto.__slideCreateImageDataPatched) return;
+                var orig = proto.createImageData;
+                if (typeof orig !== 'function') return;
+
+                proto.createImageData = function(a, b){
+                  try {
+                    var w = a;
+                    var h = b;
+                    if (a && typeof a === 'object' && typeof a.width !== 'undefined' && typeof a.height !== 'undefined') {
+                      w = a.width;
+                      h = a.height;
+                    }
+                    w = Number(w);
+                    h = Number(h);
+                    if (!isFinite(w) || w <= 0) w = 1;
+                    if (!isFinite(h) || h <= 0) h = 1;
+                    return orig.call(this, w, h);
+                  } catch (e) {
+                    try {
+                      // @ts-ignore
+                      return new ImageData(1, 1);
+                    } catch (e2) {
+                      try {
+                        return orig.call(this, 1, 1);
+                      } catch (e3) {
+                        return null;
+                      }
+                    }
+                  }
+                };
+                proto.__slideCreateImageDataPatched = true;
+              } catch (e) {}
+            })();
+          </script>
+          <script>
+            (function(){
               function loadScript(src){
                 return new Promise(function(res,rej){
                   var s=document.createElement('script');
@@ -460,7 +513,9 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
           <script>
             (function(){
               var forceFit = false;
+              var isThumbnail = false;
               try { forceFit = (document && document.documentElement && document.documentElement.getAttribute('data-force-fit') === 'true'); } catch (e) {}
+              try { isThumbnail = (document && document.documentElement && document.documentElement.getAttribute('data-thumbnail') === 'true'); } catch (e) {}
 
               function dims(el){
                 try {
@@ -513,6 +568,10 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                   scaleEl.style.width = '';
                   scaleEl.style.height = '';
 
+                  try { contentEl.style.width = ''; } catch (e) {}
+                  try { contentEl.style.height = ''; } catch (e) {}
+                  try { contentEl.style.overflow = ''; } catch (e) {}
+
                   frameEl.style.width = '';
                   frameEl.style.height = '';
                   frameEl.style.overflow = '';
@@ -526,6 +585,13 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                     var basePad = viewport.getAttribute('data-base-padding');
                     viewport.style.padding = (basePad === null) ? '' : basePad;
                   } catch (e) {}
+
+                  if (isThumbnail) {
+                    try { viewport.style.overflow = 'hidden'; } catch (e) {}
+                    try { viewport.style.padding = '0px'; } catch (e) {}
+                    try { viewport.style.alignItems = 'center'; } catch (e) {}
+                    try { viewport.style.justifyContent = 'center'; } catch (e) {}
+                  }
 
                   var vw = viewport.clientWidth || 0;
                   var vh = viewport.clientHeight || 0;
@@ -542,6 +608,85 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                   var aw = Math.max(0, vw - padX);
                   var ah = Math.max(0, vh - padY);
                   if (aw <= 0 || ah <= 0) return;
+
+                  if (isThumbnail) {
+                    var baseW = 1280;
+                    var baseH = 720;
+                    try {
+                      var canvases = [];
+                      try {
+                        canvases = contentEl.querySelectorAll ? Array.prototype.slice.call(contentEl.querySelectorAll('canvas')) : [];
+                      } catch (e) {
+                        canvases = [];
+                      }
+
+                      var bestW = 0;
+                      var bestH = 0;
+                      for (var ci = 0; ci < canvases.length; ci++) {
+                        var cv = canvases[ci];
+                        if (!cv) continue;
+
+                        var cwCss = 0;
+                        var chCss = 0;
+                        try {
+                          var cr = cv.getBoundingClientRect ? cv.getBoundingClientRect() : null;
+                          cwCss = Math.max(cwCss, cr ? cr.width : 0);
+                          chCss = Math.max(chCss, cr ? cr.height : 0);
+                        } catch (e) {}
+                        try {
+                          if (cv.offsetWidth && cv.offsetHeight) {
+                            cwCss = Math.max(cwCss, cv.offsetWidth);
+                            chCss = Math.max(chCss, cv.offsetHeight);
+                          }
+                        } catch (e) {}
+
+                        var cw = 0;
+                        var ch = 0;
+                        if (cwCss && chCss && isFinite(cwCss) && isFinite(chCss)) {
+                          cw = cwCss;
+                          ch = chCss;
+                        } else {
+                          try {
+                            if (cv.width && cv.height) {
+                              cw = cv.width;
+                              ch = cv.height;
+                            }
+                          } catch (e) {}
+                        }
+
+                        if (cw && ch && isFinite(cw) && isFinite(ch) && cw > 50 && ch > 50) {
+                          if ((cw * ch) > (bestW * bestH)) {
+                            bestW = cw;
+                            bestH = ch;
+                          }
+                        }
+                      }
+
+                      if (bestW && bestH) {
+                        baseW = Math.round(bestW);
+                        baseH = Math.round(bestH);
+                      }
+                    } catch (e) {}
+                    var s0 = Math.min(1, aw / baseW, ah / baseH);
+                    if (!isFinite(s0) || s0 <= 0) return;
+
+                    try { contentEl.style.width = baseW + 'px'; } catch (e) {}
+                    try { contentEl.style.height = baseH + 'px'; } catch (e) {}
+                    try { contentEl.style.overflow = 'hidden'; } catch (e) {}
+
+                    scaleEl.style.width = baseW + 'px';
+                    scaleEl.style.height = baseH + 'px';
+                    scaleEl.style.transformOrigin = 'top left';
+                    scaleEl.style.transform = 'scale(' + s0 + ')';
+
+                    frameEl.style.width = Math.max(1, Math.round(baseW * s0)) + 'px';
+                    frameEl.style.height = Math.max(1, Math.round(baseH * s0)) + 'px';
+                    frameEl.style.overflow = 'hidden';
+
+                    try { viewport.style.alignItems = 'center'; } catch (e) {}
+                    try { viewport.style.justifyContent = 'center'; } catch (e) {}
+                    return;
+                  }
 
                   var kids = Array.prototype.slice.call(contentEl.children || []).filter(function(n){
                     try {
@@ -594,7 +739,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
 
                   var heightOverflow = h > ah * 1.02;
                   var widthOverflow = w > aw * 1.02;
-                  if (!isPresentation) {
+                  if (!isThumbnail && !isPresentation) {
                     if (!heightOverflow && !widthOverflow) {
                       try { viewport.style.alignItems = 'center'; } catch (e) {}
                       return;
@@ -605,7 +750,7 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                     }
                   }
 
-                  if (!forceFit && !heightOverflow && !widthOverflow) return;
+                  if (!isThumbnail && !forceFit && !heightOverflow && !widthOverflow) return;
 
                   var isMedia = false;
                   try {
@@ -627,9 +772,9 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                       if (st && /height\s*:\s*\d+px/i.test(st) && heightOverflow && !likelyDocument) looksLikeSlide = true;
                     } catch (e) {}
                   }
-                  if (!forceFit && !looksLikeSlide) return;
+                  if (!isThumbnail && !forceFit && !looksLikeSlide) return;
 
-                  var s = isPresentation ? Math.min(1, aw / w, ah / h) : Math.min(1, aw / w);
+                  var s = isPresentation ? Math.min(1, aw / w, ah / h) : (isThumbnail ? Math.min(1, aw / w, ah / h) : Math.min(1, aw / w));
                   if (!isFinite(s) || s <= 0 || s >= 0.999) return;
                   if (isPresentation && forceFit && s < 0.2) {
                     try { viewport.style.overflow = 'auto'; } catch (e) {}
@@ -655,6 +800,8 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
 
                   if (forceFit) {
                     if (isPresentation) {
+                      try { viewport.style.overflow = 'hidden'; } catch (e) {}
+                    } else if (isThumbnail) {
                       try { viewport.style.overflow = 'hidden'; } catch (e) {}
                     } else {
                       try { viewport.style.overflow = 'auto'; } catch (e) {}
@@ -684,6 +831,13 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                 }
               } catch (e) {}
               try {
+                if (isThumbnail) {
+                  setTimeout(schedule, 50);
+                  setTimeout(schedule, 200);
+                  setTimeout(schedule, 600);
+                }
+              } catch (e) {}
+              try {
                 var lastObs = 0;
                 var mo = new MutationObserver(function(){
                   var now = Date.now();
@@ -694,6 +848,18 @@ export const SlideIframe = forwardRef<HTMLIFrameElement, SlideIframeProps>(({ co
                 var root = null;
                 try { root = document.getElementById('__slide_content') || document.body || document.documentElement; } catch (e) {}
                 if (root) mo.observe(root, { childList: true, subtree: true });
+              } catch (e) {}
+              try {
+                if (typeof ResizeObserver === 'function') {
+                  var ro = new ResizeObserver(function(){ schedule(); });
+                  try {
+                    var vp = document.getElementById('__slide_viewport');
+                    if (vp) ro.observe(vp);
+                  } catch (e) {}
+                  try {
+                    if (document && document.documentElement) ro.observe(document.documentElement);
+                  } catch (e) {}
+                }
               } catch (e) {}
               try { window.__fitSlideToViewport = schedule; } catch (e) {}
             })();

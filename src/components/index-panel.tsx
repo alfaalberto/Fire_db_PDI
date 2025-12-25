@@ -13,12 +13,13 @@ import { useToast } from '@/hooks/use-toast';
 interface IndexPanelProps {
   data: IndexItemType[];
   activeSlideId: string | null;
-  onSelect: (id: string) => void;
+  selectedIds: Set<string>;
+  onSelect: (id: string, e: React.MouseEvent) => void;
   onIndexChange: (newIndex: IndexItemType[]) => void;
   onMove: (dragId: string, dropId: string) => void;
 }
 
-export function IndexPanel({ data, activeSlideId, onSelect, onIndexChange, onMove }: IndexPanelProps) {
+export function IndexPanel({ data, activeSlideId, selectedIds, onSelect, onIndexChange, onMove }: IndexPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -113,6 +114,7 @@ export function IndexPanel({ data, activeSlideId, onSelect, onIndexChange, onMov
                   item={item}
                   level={0}
                   activeSlideId={activeSlideId}
+                  selectedIds={selectedIds}
                   onSelect={onSelect}
                   onMove={onMove}
                 />
